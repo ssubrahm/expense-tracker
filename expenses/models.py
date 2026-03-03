@@ -19,7 +19,11 @@ class Expense(models.Model):
         ("cash", "Cash"),
         ("credit_card", "Credit Card"),
         ("debit_card", "Debit Card"),
+        ("upi", "UPI"),
         ("bank_transfer", "Bank Transfer"),
+        ("mobile_wallet", "Mobile Wallet"),
+        ("cheque", "Cheque"),
+        ("bnpl", "Buy Now Pay Later"),
         ("other", "Other"),
     ]
 
