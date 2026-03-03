@@ -1,8 +1,9 @@
 {% extends "expenses/base.html" %}
+{% load expense_tags %}
 {% block content %}
 <div class="card" style="max-width:480px;margin:0 auto;">
   <h1>Delete Expense</h1>
-  <p>Are you sure you want to delete <strong>{{ expense.title }}</strong> (${{ expense.amount }})?</p>
+  <p>Are you sure you want to delete <strong>{{ expense.title }}</strong> ({{ expense.amount|inr }})?</p>
   <form method="post" style="margin-top:1rem;display:flex;gap:0.5rem;">
     {% csrf_token %}
     <button type="submit" class="btn btn-danger">Yes, delete</button>

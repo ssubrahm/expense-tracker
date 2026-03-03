@@ -1,4 +1,5 @@
 {% extends "expenses/base.html" %}
+{% load expense_tags %}
 {% block content %}
 <div class="page-header">
   <h1 class="page-title" style="margin:0">Budgets</h1>
@@ -23,8 +24,8 @@
     </div>
 
     <div style="display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:.4rem;">
-      <span>Spent: <strong class="amount-cell">${{ bd.spent|floatformat:2 }}</strong></span>
-      <span>Budget: <strong>${{ bd.budget.amount|floatformat:2 }}</strong></span>
+      <span>Spent: <strong class="amount-cell">{{ bd.spent|inr }}</strong></span>
+      <span>Budget: <strong>{{ bd.budget.amount|inr }}</strong></span>
     </div>
 
     <div class="budget-bar-track">
@@ -34,9 +35,9 @@
     <div style="display:flex;justify-content:space-between;margin-top:.4rem;font-size:.78rem;">
       <span style="color:var(--muted)">{{ bd.pct }}% used</span>
       {% if bd.remaining >= 0 %}
-        <span style="color:var(--green);font-weight:600;">${{ bd.remaining|floatformat:2 }} left</span>
+        <span style="color:var(--green);font-weight:600;">{{ bd.remaining|inr }} left</span>
       {% else %}
-        <span style="color:var(--red);font-weight:600;">Over by ${{ bd.remaining|floatformat:2|cut:"-" }}</span>
+        <span style="color:var(--red);font-weight:600;">Over by {{ bd.remaining|inr }}</span>
       {% endif %}
     </div>
   </div>

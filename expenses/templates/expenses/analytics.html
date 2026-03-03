@@ -1,4 +1,5 @@
 {% extends "expenses/base.html" %}
+{% load expense_tags %}
 {% block content %}
 
 <div class="page-header">
@@ -10,16 +11,16 @@
 <div class="stats-grid">
   <div class="stat-card">
     <div class="stat-label">All-Time Spend</div>
-    <div class="stat-value">${{ overall.total|floatformat:2 }}</div>
+    <div class="stat-value">{{ overall.total|inr }}</div>
     <div class="stat-sub">{{ overall.count }} expenses</div>
   </div>
   <div class="stat-card g">
     <div class="stat-label">Avg per Expense</div>
-    <div class="stat-value">${{ overall.avg|floatformat:2 }}</div>
+    <div class="stat-value">{{ overall.avg|inr }}</div>
   </div>
   <div class="stat-card o">
     <div class="stat-label">Largest Expense</div>
-    <div class="stat-value">${{ overall.biggest|floatformat:2 }}</div>
+    <div class="stat-value">{{ overall.biggest|inr }}</div>
   </div>
   <div class="stat-card p">
     <div class="stat-label">Months Tracked</div>
@@ -80,8 +81,8 @@
           {% with pct=day.amount|floatformat:0 %}
           <div class="heatmap-cell"
                style="background: rgba(59,130,246,{{ day.amount|floatformat:2 }});"
-               data-tip="{{ day.date }}: ${{ day.amount|floatformat:2 }}"
-               title="{{ day.date }}: ${{ day.amount|floatformat:2 }}">
+               data-tip="{{ day.date }}: {{ day.amount|inr }}"
+               title="{{ day.date }}: {{ day.amount|inr }}">
           </div>
           {% endwith %}
         {% else %}
@@ -118,7 +119,7 @@
         <td style="color:var(--muted);">{{ e.date }}</td>
         <td><strong>{{ e.title }}</strong></td>
         <td><span class="cat-badge">{{ e.category.name|default:"—" }}</span></td>
-        <td class="amount-cell">${{ e.amount|floatformat:2 }}</td>
+        <td class="amount-cell">{{ e.amount|inr }}</td>
         <td><span class="pay-badge">{{ e.get_payment_method_display }}</span></td>
       </tr>
       {% endfor %}
@@ -157,10 +158,10 @@ new Chart(document.getElementById('lineChart'), {
     interaction: { mode: 'index', intersect: false },
     plugins: {
       legend: { display: false },
-      tooltip: { callbacks: { label: c => ` $${c.parsed.y.toFixed(2)}` } }
+      tooltip: { callbacks: { label: c => ` ₹${c.parsed.y.toFixed(2)}` } }
     },
     scales: {
-      y: { beginAtZero: true, ticks: { callback: v => '$' + v } },
+      y: { beginAtZero: true, ticks: { callback: v => '₹' + v } },
       x: { grid: { display: false } }
     }
   }
@@ -209,8 +210,8 @@ new Chart(document.getElementById('weeklyChart'), {
   },
   options: {
     responsive: true,
-    plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` $${c.parsed.y.toFixed(2)}` } } },
-    scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + v } }, x: { grid: { display: false } } }
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ₹${c.parsed.y.toFixed(2)}` } } },
+    scales: { y: { beginAtZero: true, ticks: { callback: v => '₹' + v } }, x: { grid: { display: false } } }
   }
 });
 
@@ -223,10 +224,10 @@ new Chart(document.getElementById('stackedChart'), {
     interaction: { mode: 'index', intersect: false },
     plugins: {
       legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
-      tooltip: { callbacks: { label: c => ` ${c.dataset.label}: $${c.parsed.y.toFixed(2)}` } }
+      tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ₹${c.parsed.y.toFixed(2)}` } }
     },
     scales: {
-      y: { beginAtZero: true, stacked: true, ticks: { callback: v => '$' + v } },
+      y: { beginAtZero: true, stacked: true, ticks: { callback: v => '₹' + v } },
       x: { stacked: true, grid: { display: false } }
     }
   }

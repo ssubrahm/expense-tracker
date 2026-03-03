@@ -307,9 +307,9 @@ def analytics(request):
         diff = last - prev
         pct = round(abs(diff) / prev * 100, 1) if prev else 0
         if diff > 0:
-            insights.append({"type": "warning", "icon": "📈", "text": f"Spending is up {pct}% vs last month (${last:.2f} vs ${prev:.2f})"})
+            insights.append({"type": "warning", "icon": "📈", "text": f"Spending is up {pct}% vs last month (₹{last:,.2f} vs ₹{prev:,.2f})"})
         else:
-            insights.append({"type": "success", "icon": "📉", "text": f"Spending is down {pct}% vs last month — great job! (${last:.2f} vs ${prev:.2f})"})
+            insights.append({"type": "success", "icon": "📉", "text": f"Spending is down {pct}% vs last month — great job! (₹{last:,.2f} vs ₹{prev:,.2f})"})
 
     # Most expensive category this month
     this_month_cat = (
@@ -317,20 +317,20 @@ def analytics(request):
         .values("category__name").annotate(t=Sum("amount")).order_by("-t").first()
     )
     if this_month_cat:
-        insights.append({"type": "info", "icon": "🏆", "text": f"Top category this month: {this_month_cat['category__name'] or 'Uncategorised'} (${this_month_cat['t']:.2f})"})
+        insights.append({"type": "info", "icon": "🏆", "text": f"Top category this month: {this_month_cat['category__name'] or 'Uncategorised'} (₹{this_month_cat['t']:,.2f})"})
 
     # Biggest single day
     biggest_day = (
         all_expenses.values("date").annotate(t=Sum("amount")).order_by("-t").first()
     )
     if biggest_day:
-        insights.append({"type": "info", "icon": "🔥", "text": f"Biggest spending day: {biggest_day['date']} (${biggest_day['t']:.2f})"})
+        insights.append({"type": "info", "icon": "🔥", "text": f"Biggest spending day: {biggest_day['date']} (₹{biggest_day['t']:,.2f})"})
 
     # Avg weekend vs weekday
     weekday_avg = all_expenses.filter(date__week_day__in=[2,3,4,5,6]).aggregate(a=Avg("amount"))["a"] or 0
     weekend_avg = all_expenses.filter(date__week_day__in=[1,7]).aggregate(a=Avg("amount"))["a"] or 0
     if weekday_avg and weekend_avg:
-        insights.append({"type": "info", "icon": "📅", "text": f"Weekend avg expense ${weekend_avg:.2f} vs weekday ${weekday_avg:.2f}"})
+        insights.append({"type": "info", "icon": "📅", "text": f"Weekend avg expense ₹{weekend_avg:,.2f} vs weekday ₹{weekday_avg:,.2f}"})
 
     # Most used payment method
     top_payment = (
