@@ -1,0 +1,51 @@
+{% extends "expenses/base.html" %}
+{% block content %}
+<div class="page-header">
+  <h1>Monthly View</h1>
+  <a href="{% url 'export_csv' %}?{{ request.GET.urlencode }}" class="btn btn-success btn-sm">⬇ Export CSV</a>
+</div>
+
+<div class="stats-grid" style="margin-bottom:1.25rem;">
+  <div class="stat-card">
+    <div class="label">Grand Total</div>
+    <div class="value">${{ grand_total|floatformat:2 }}</div>
+    <div class="sub">across {{ months|length }} month{{ months|length|pluralize }}</div>
+  </div>
+</div>
+
+{% for m in months %}
+<div class="month-block">
+  <div class="month-block-header">
+    <span class="month-name">{{ m.month|date:"F Y" }}</span>
+    <span>{{ m.count }} expense{{ m.count|pluralize }} &nbsp;·&nbsp; <span class="month-total">${{ m.total|floatformat:2 }}</span></span>
+  </div>
+  <div style="border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;overflow:hidden;">
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th><th>Title</th><th>Category</th><th>Amount</th><th>Payment</th><th>Notes</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in m.expenses %}
+        <tr>
+          <td style="color:#718096;white-space:nowrap;">{{ e.date }}</td>
+          <td><strong>{{ e.title }}</strong></td>
+          <td><span class="category-badge">{{ e.category.name|default:"—" }}</span></td>
+          <td class="amount-cell">${{ e.amount|floatformat:2 }}</td>
+          <td><span class="payment-badge">{{ e.get_payment_method_display }}</span></td>
+          <td style="color:#a0aec0;">{{ e.notes|truncatechars:40|default:"—" }}</td>
+          <td class="actions">
+            <a href="{% url 'expense_edit' e.pk %}" class="btn btn-outline btn-sm">Edit</a>
+            <a href="{% url 'expense_delete' e.pk %}" class="btn btn-danger btn-sm">Del</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% empty %}
+<div class="empty-state"><div class="icon">📭</div><p>No expenses found.</p></div>
+{% endfor %}
+{% endblock %}

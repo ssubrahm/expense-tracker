@@ -1,0 +1,375 @@
+{% extends "expenses/base.html" %}
+{% load expense_tags %}
+{% block content %}
+
+<div class="page-header">
+  <h1 class="page-title" style="margin:0">Dashboard</h1>
+  <div style="display:flex;gap:.5rem;">
+    <a href="{% url 'export_csv' %}?{{ current_qs }}" class="btn btn-success btn-sm">⬇ CSV</a>
+  </div>
+</div>
+
+<!-- STAT CARDS -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-label">Total Spent</div>
+    <div class="stat-value">${{ total|floatformat:2 }}</div>
+    <div class="stat-sub">{{ count }} expense{{ count|pluralize }}</div>
+  </div>
+  <div class="stat-card g">
+    <div class="stat-label">Avg per Expense</div>
+    <div class="stat-value">${{ avg_expense|floatformat:2 }}</div>
+  </div>
+  <div class="stat-card p">
+    <div class="stat-label">Avg Daily Spend</div>
+    <div class="stat-value">${{ avg_daily|floatformat:2 }}</div>
+  </div>
+  <div class="stat-card o">
+    <div class="stat-label">Biggest Expense</div>
+    <div class="stat-value">${{ biggest|floatformat:2 }}</div>
+  </div>
+  {% if overall_budget %}
+  <div class="stat-card {% if budget_pct >= 90 %}r{% elif budget_pct >= 70 %}o{% else %}t{% endif %}">
+    <div class="stat-label">This Month Budget</div>
+    <div class="stat-value">${{ current_month_total|floatformat:2 }}</div>
+    <div class="budget-bar-wrap">
+      <div class="budget-bar"><div class="budget-bar-fill {% if budget_pct >= 90 %}danger{% elif budget_pct >= 70 %}warn{% endif %}" style="width:{{ budget_pct }}%"></div></div>
+    </div>
+    <div class="stat-sub">{{ budget_pct }}% of ${{ overall_budget.amount|floatformat:2 }} budget</div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- CATEGORY BUDGET PROGRESS BARS -->
+{% if cat_budgets %}
+<div class="card" style="margin-bottom:1.25rem;">
+  <div class="card-title">Category Budget Progress — {{ today|date:"F Y" }}</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.85rem;">
+    {% for cb in cat_budgets %}
+    <div>
+      <div style="display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:.3rem;">
+        <span style="font-weight:600;">{{ cb.budget.category.name }}</span>
+        <span style="color:{% if cb.pct >= 90 %}var(--red){% elif cb.pct >= 70 %}var(--orange){% else %}var(--muted){% endif %}">
+          ${{ cb.spent|floatformat:2 }} / ${{ cb.budget.amount|floatformat:2 }}
+        </span>
+      </div>
+      <div class="budget-bar">
+        <div class="budget-bar-fill {% if cb.pct >= 90 %}danger{% elif cb.pct >= 70 %}warn{% endif %}" style="width:{{ cb.pct }}%"></div>
+      </div>
+      <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem;">
+        {% if cb.remaining > 0 %}${{ cb.remaining|floatformat:2 }} remaining{% else %}<span style="color:var(--red)">Over budget by ${{ cb.remaining|floatformat:2|cut:"-" }}</span>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- CHARTS -->
+<div class="charts-grid">
+  <div class="chart-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.85rem;">
+      <div class="chart-title" style="margin:0">Spending Trend</div>
+      <div style="display:flex;gap:.3rem;">
+        <button class="btn btn-outline btn-sm" onclick="setChartType('bar')">Bar</button>
+        <button class="btn btn-outline btn-sm" onclick="setChartType('line')">Line</button>
+        <button class="btn btn-outline btn-sm" onclick="setChartType('stacked')">Stacked</button>
+      </div>
+    </div>
+    <canvas id="trendChart"></canvas>
+  </div>
+  <div class="chart-card">
+    <div class="chart-title">By Category</div>
+    <canvas id="categoryChart"></canvas>
+  </div>
+</div>
+
+<!-- FILTER PANEL -->
+<div class="filter-panel">
+  <div class="filter-toggle">
+    <h2>🔎 Filters &amp; Search</h2>
+    <span>▼ Show filters</span>
+  </div>
+  <div class="filter-body">
+    <form method="get" id="filterForm">
+      <div class="filter-grid">
+
+        <!-- Col 1: Search + amount slider -->
+        <div class="filter-col">
+          <label class="col-title">Search</label>
+          <input type="text" name="search" value="{{ filter_form.search.value|default:'' }}" placeholder="Search title or notes…">
+
+          <label class="col-title" style="margin-top:.75rem;">Amount Range</label>
+          <div class="slider-wrap">
+            <div class="slider-track">
+              <div class="slider-range" id="sliderRange"></div>
+              <input type="range" id="sliderMin" min="{{ amount_global_min }}" max="{{ amount_global_max }}" step="1" value="{{ filter_form.amount_min.value|default:amount_global_min }}">
+              <input type="range" id="sliderMax" min="{{ amount_global_min }}" max="{{ amount_global_max }}" step="1" value="{{ filter_form.amount_max.value|default:amount_global_max }}">
+            </div>
+            <div class="slider-labels">
+              <span>${{ amount_global_min|floatformat:0 }}</span>
+              <span>${{ amount_global_max|floatformat:0 }}</span>
+            </div>
+            <div class="slider-values">
+              <input type="number" id="amountMinInput" name="amount_min" value="{{ filter_form.amount_min.value|default:'' }}" placeholder="Min" step="1" min="0">
+              <span>—</span>
+              <input type="number" id="amountMaxInput" name="amount_max" value="{{ filter_form.amount_max.value|default:'' }}" placeholder="Max" step="1" min="0">
+            </div>
+          </div>
+        </div>
+
+        <!-- Col 2: Date presets + custom range -->
+        <div class="filter-col">
+          <label class="col-title">Date Period</label>
+          {% with preset=filter_form.date_preset.value %}
+          <div class="preset-btns">
+            <button type="button" class="preset-btn {% if preset == 'today' %}active{% endif %}" onclick="setPreset('today')">Today</button>
+            <button type="button" class="preset-btn {% if preset == 'this_week' %}active{% endif %}" onclick="setPreset('this_week')">This Week</button>
+            <button type="button" class="preset-btn {% if preset == 'this_month' %}active{% endif %}" onclick="setPreset('this_month')">This Month</button>
+            <button type="button" class="preset-btn {% if preset == 'last_month' %}active{% endif %}" onclick="setPreset('last_month')">Last Month</button>
+            <button type="button" class="preset-btn {% if preset == 'last_3_months' %}active{% endif %}" onclick="setPreset('last_3_months')">Last 3 Mo</button>
+            <button type="button" class="preset-btn {% if preset == 'this_year' %}active{% endif %}" onclick="setPreset('this_year')">This Year</button>
+          </div>
+          {% endwith %}
+          <input type="hidden" name="date_preset" id="date_preset" value="{{ filter_form.date_preset.value|default:'' }}">
+          <div style="margin-top:.6rem;display:flex;flex-direction:column;gap:.3rem;">
+            <input type="date" name="date_from" value="{{ filter_form.date_from.value|default:'' }}" title="From date">
+            <input type="date" name="date_to" value="{{ filter_form.date_to.value|default:'' }}" title="To date">
+          </div>
+        </div>
+
+        <!-- Col 3: Categories -->
+        <div class="filter-col">
+          <label class="col-title">Categories</label>
+          <div class="check-list">
+            {% for cat in filter_form.categories %}
+            <label>{{ cat.tag }} {{ cat.choice_label }}</label>
+            {% endfor %}
+          </div>
+        </div>
+
+        <!-- Col 4: Payment method -->
+        <div class="filter-col">
+          <label class="col-title">Payment Method</label>
+          <div class="check-list">
+            {% for pm in filter_form.payment_method %}
+            <label>{{ pm.tag }} {{ pm.choice_label }}</label>
+            {% endfor %}
+          </div>
+        </div>
+
+      </div><!-- end filter-grid -->
+
+      <div style="display:flex;gap:.5rem;margin-top:1rem;align-items:center;flex-wrap:wrap;">
+        <button type="submit" class="btn btn-primary">Apply Filters</button>
+        <a href="{% url 'dashboard' %}" class="btn btn-secondary">Clear All</a>
+        {% if count %}<span style="color:var(--muted);font-size:.8rem;">{{ count }} result{{ count|pluralize }} · ${{ total|floatformat:2 }}</span>{% endif %}
+      </div>
+    </form>
+  </div>
+
+  <!-- SAVED FILTERS -->
+  <div class="saved-filters-row">
+    <span style="font-size:.78rem;font-weight:600;color:var(--muted);margin-right:.25rem;">Saved:</span>
+    {% for sf in saved_filters %}
+    <a href="/?{{ sf.query_string }}" class="saved-filter-chip">
+      {{ sf.name }}
+      <form method="post" style="display:inline;" onsubmit="return confirm('Delete this filter?')">
+        {% csrf_token %}
+        <input type="hidden" name="delete_filter" value="1">
+        <input type="hidden" name="filter_id" value="{{ sf.pk }}">
+        <button class="del-btn" type="submit" title="Delete">✕</button>
+      </form>
+    </a>
+    {% empty %}
+    <span style="font-size:.78rem;color:#94a3b8;">No saved filters yet</span>
+    {% endfor %}
+    <form method="post" class="save-filter-form">
+      {% csrf_token %}
+      <input type="hidden" name="save_filter" value="1">
+      <input type="hidden" name="current_qs" value="{{ current_qs }}">
+      <input type="text" name="name" placeholder="Name this filter…" required>
+      <button type="submit" class="btn btn-outline btn-sm">💾 Save</button>
+    </form>
+  </div>
+</div>
+
+<!-- EXPENSE TABLE -->
+<div class="table-card">
+  <div class="table-toolbar">
+    <h2>Expenses</h2>
+    <span class="table-meta">{{ count }} expense{{ count|pluralize }}</span>
+  </div>
+  {% if expenses %}
+  <table>
+    <thead>
+      <tr>
+        <th><a href="?{% url_replace 'sort' '-date' %}">Date {% if sort == '-date' %}↓{% elif sort == 'date' %}↑{% else %}<span style="opacity:.4">↕</span>{% endif %}</a></th>
+        <th><a href="?{% url_replace 'sort' 'title' %}">Title {% if sort == 'title' %}↑{% elif sort == '-title' %}↓{% else %}<span style="opacity:.4">↕</span>{% endif %}</a></th>
+        <th><a href="?{% url_replace 'sort' 'category' %}">Category {% if sort == 'category' %}↑{% elif sort == '-category' %}↓{% else %}<span style="opacity:.4">↕</span>{% endif %}</a></th>
+        <th><a href="?{% url_replace 'sort' '-amount' %}">Amount {% if sort == '-amount' %}↓{% elif sort == 'amount' %}↑{% else %}<span style="opacity:.4">↕</span>{% endif %}</a></th>
+        <th>Payment</th>
+        <th>Notes</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in expenses %}
+      <tr>
+        <td style="color:var(--muted);white-space:nowrap;">{{ e.date }}</td>
+        <td><strong>{{ e.title }}</strong></td>
+        <td><span class="cat-badge">{{ e.category.name|default:"—" }}</span></td>
+        <td class="amount-cell">${{ e.amount|floatformat:2 }}</td>
+        <td><span class="pay-badge">{{ e.get_payment_method_display }}</span></td>
+        <td style="color:#94a3b8;max-width:180px;">{{ e.notes|truncatechars:45|default:"—" }}</td>
+        <td class="act-btns">
+          <a href="{% url 'expense_edit' e.pk %}" class="btn btn-outline btn-sm">Edit</a>
+          <a href="{% url 'expense_delete' e.pk %}" class="btn btn-danger btn-sm">Del</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state"><div class="icon">📭</div><p>No expenses match your filters.</p><a href="{% url 'dashboard' %}" style="color:var(--blue);">Clear filters</a></div>
+  {% endif %}
+</div>
+
+<!-- BREAKDOWN TABLES -->
+{% if by_category %}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.25rem;">
+  <div class="card">
+    <div class="card-title">By Category</div>
+    <table>
+      <thead><tr><th>Category</th><th>Count</th><th>Total</th></tr></thead>
+      <tbody>
+        {% for r in by_category %}
+        <tr>
+          <td><span class="cat-badge">{{ r.category__name|default:"Uncategorised" }}</span></td>
+          <td style="color:var(--muted)">{{ r.count }}</td>
+          <td class="amount-cell">${{ r.total|floatformat:2 }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card">
+    <div class="card-title">By Payment Method</div>
+    <table>
+      <thead><tr><th>Method</th><th>Count</th><th>Total</th></tr></thead>
+      <tbody>
+        {% for r in by_payment %}
+        <tr>
+          <td><span class="pay-badge">{{ r.payment_method|title }}</span></td>
+          <td style="color:var(--muted)">{{ r.count }}</td>
+          <td class="amount-cell">${{ r.total|floatformat:2 }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<script>
+const COLORS = ['#3b82f6','#22c55e','#f97316','#a855f7','#ef4444','#14b8a6','#f59e0b','#667eea'];
+const monthlyLabels = {{ monthly_labels|safe }};
+const monthlyData   = {{ monthly_data|safe }};
+const stackedDS     = {{ stacked_datasets|safe }};
+const catLabels     = {{ cat_labels|safe }};
+const catData       = {{ cat_data|safe }};
+
+let trendChart;
+function buildTrend(type) {
+  if (trendChart) trendChart.destroy();
+  const ctx = document.getElementById('trendChart').getContext('2d');
+  const isStacked = type === 'stacked';
+  trendChart = new Chart(ctx, {
+    type: isStacked ? 'bar' : type,
+    data: {
+      labels: monthlyLabels,
+      datasets: isStacked ? stackedDS : [{
+        label: 'Total ($)',
+        data: monthlyData,
+        backgroundColor: type === 'bar' ? 'rgba(59,130,246,.7)' : 'rgba(59,130,246,.1)',
+        borderColor: '#3b82f6',
+        borderWidth: 2,
+        borderRadius: type === 'bar' ? 5 : 0,
+        fill: type === 'line',
+        tension: 0.4,
+        pointRadius: type === 'line' ? 4 : 0,
+        pointHoverRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: isStacked, position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } },
+        tooltip: { callbacks: { label: ctx => ` $${ctx.parsed.y.toFixed(2)}` } }
+      },
+      scales: {
+        y: { beginAtZero: true, stacked: isStacked, ticks: { callback: v => '$' + v } },
+        x: { stacked: isStacked, grid: { display: false } }
+      }
+    }
+  });
+}
+function setChartType(t) { buildTrend(t); }
+buildTrend('bar');
+
+// Category donut
+new Chart(document.getElementById('categoryChart').getContext('2d'), {
+  type: 'doughnut',
+  data: {
+    labels: catLabels,
+    datasets: [{ data: catData, backgroundColor: COLORS, borderWidth: 2, borderColor: '#fff' }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } },
+      tooltip: { callbacks: { label: ctx => ` $${ctx.parsed.toFixed(2)}` } }
+    }
+  }
+});
+
+// RANGE SLIDER
+(function() {
+  const sMin = document.getElementById('sliderMin');
+  const sMax = document.getElementById('sliderMax');
+  const iMin = document.getElementById('amountMinInput');
+  const iMax = document.getElementById('amountMaxInput');
+  const range = document.getElementById('sliderRange');
+  const gmin = parseFloat(sMin.min), gmax = parseFloat(sMax.max);
+
+  function updateRange() {
+    const lo = parseFloat(sMin.value), hi = parseFloat(sMax.value);
+    const plo = (lo - gmin) / (gmax - gmin) * 100;
+    const phi = (hi - gmin) / (gmax - gmin) * 100;
+    range.style.left = plo + '%';
+    range.style.width = (phi - plo) + '%';
+  }
+  sMin.addEventListener('input', function() {
+    if (parseFloat(sMin.value) > parseFloat(sMax.value)) sMin.value = sMax.value;
+    iMin.value = sMin.value; updateRange();
+  });
+  sMax.addEventListener('input', function() {
+    if (parseFloat(sMax.value) < parseFloat(sMin.value)) sMax.value = sMin.value;
+    iMax.value = sMax.value; updateRange();
+  });
+  iMin.addEventListener('change', function() { sMin.value = iMin.value || gmin; updateRange(); });
+  iMax.addEventListener('change', function() { sMax.value = iMax.value || gmax; updateRange(); });
+  updateRange();
+})();
+
+// DATE PRESET
+function setPreset(val) {
+  document.getElementById('date_preset').value = val;
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  document.querySelector('[name=date_from]').value = '';
+  document.querySelector('[name=date_to]').value = '';
+}
+</script>
+{% endblock %}

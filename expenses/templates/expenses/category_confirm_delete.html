@@ -1,0 +1,12 @@
+{% extends "expenses/base.html" %}
+{% block content %}
+<div class="card" style="max-width:480px;margin:0 auto;">
+  <h1>Delete Category</h1>
+  <p>Are you sure you want to delete category <strong>{{ category.name }}</strong>? Expenses in this category will become uncategorised.</p>
+  <form method="post" style="margin-top:1rem;display:flex;gap:0.5rem;">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-danger">Yes, delete</button>
+    <a href="{% url 'category_list' %}" class="btn btn-secondary">Cancel</a>
+  </form>
+</div>
+{% endblock %}

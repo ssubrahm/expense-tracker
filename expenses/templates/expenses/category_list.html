@@ -1,0 +1,29 @@
+{% extends "expenses/base.html" %}
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+  <h1 style="margin:0">Categories</h1>
+  <a href="{% url 'category_create' %}" class="btn btn-primary">+ Add Category</a>
+</div>
+<div class="card">
+  {% if categories %}
+  <table>
+    <thead>
+      <tr><th>Name</th><th>Total Spent</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+      {% for cat in categories %}
+      <tr>
+        <td>{{ cat.name }}</td>
+        <td class="amount">{% if cat.total %}${{ cat.total }}{% else %}—{% endif %}</td>
+        <td>
+          <a href="{% url 'category_delete' cat.pk %}" class="btn btn-danger btn-sm">Delete</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No categories yet. <a href="{% url 'category_create' %}">Add one</a>.</p>
+  {% endif %}
+</div>
+{% endblock %}

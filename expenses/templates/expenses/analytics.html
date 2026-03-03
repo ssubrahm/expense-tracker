@@ -1,0 +1,235 @@
+{% extends "expenses/base.html" %}
+{% block content %}
+
+<div class="page-header">
+  <h1 class="page-title" style="margin:0">Analytics &amp; Insights</h1>
+  <span style="font-size:.82rem;color:var(--muted)">All-time data · {{ today }}</span>
+</div>
+
+<!-- OVERALL STATS -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-label">All-Time Spend</div>
+    <div class="stat-value">${{ overall.total|floatformat:2 }}</div>
+    <div class="stat-sub">{{ overall.count }} expenses</div>
+  </div>
+  <div class="stat-card g">
+    <div class="stat-label">Avg per Expense</div>
+    <div class="stat-value">${{ overall.avg|floatformat:2 }}</div>
+  </div>
+  <div class="stat-card o">
+    <div class="stat-label">Largest Expense</div>
+    <div class="stat-value">${{ overall.biggest|floatformat:2 }}</div>
+  </div>
+  <div class="stat-card p">
+    <div class="stat-label">Months Tracked</div>
+    <div class="stat-value">{{ monthly_labels|length }}</div>
+  </div>
+</div>
+
+<!-- INSIGHTS -->
+<div class="card" style="margin-bottom:1.25rem;">
+  <div class="card-title">💡 Smart Insights</div>
+  {% for i in insights %}
+  <div class="insight-card {{ i.type }}">
+    <span class="insight-icon">{{ i.icon }}</span>
+    <span>{{ i.text }}</span>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- ROW 1: Monthly trend line + MoM change -->
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:1rem;margin-bottom:1.25rem;">
+  <div class="chart-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.85rem;">
+      <div class="chart-title" style="margin:0">Monthly Spending (Line)</div>
+    </div>
+    <canvas id="lineChart"></canvas>
+  </div>
+  <div class="chart-card">
+    <div class="chart-title">Month-over-Month Change (%)</div>
+    <canvas id="momChart"></canvas>
+  </div>
+</div>
+
+<!-- ROW 2: Weekly trend + top 5 category stacked -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.25rem;">
+  <div class="chart-card">
+    <div class="chart-title">Weekly Spending (Last 12 Weeks)</div>
+    <canvas id="weeklyChart"></canvas>
+  </div>
+  <div class="chart-card">
+    <div class="chart-title">Category Trend (Stacked Monthly)</div>
+    <canvas id="stackedChart"></canvas>
+  </div>
+</div>
+
+<!-- ROW 3: Activity heatmap -->
+<div class="card" style="margin-bottom:1.25rem;">
+  <div class="card-title">📅 Spending Activity Heatmap (Last 12 Weeks)</div>
+  <div style="display:flex;align-items:flex-start;gap:.5rem;overflow-x:auto;padding-bottom:.5rem;">
+    <div class="heatmap-day-labels">
+      <span>&nbsp;</span>
+      <span>Mon</span><span>&nbsp;</span><span>Wed</span><span>&nbsp;</span><span>Fri</span><span>&nbsp;</span>
+    </div>
+    <div class="heatmap">
+      {% for week in heatmap_weeks %}
+      <div class="heatmap-week">
+        {% for day in week %}
+        {% if day.amount > 0 %}
+          {% with pct=day.amount|floatformat:0 %}
+          <div class="heatmap-cell"
+               style="background: rgba(59,130,246,{{ day.amount|floatformat:2 }});"
+               data-tip="{{ day.date }}: ${{ day.amount|floatformat:2 }}"
+               title="{{ day.date }}: ${{ day.amount|floatformat:2 }}">
+          </div>
+          {% endwith %}
+        {% else %}
+          <div class="heatmap-cell" title="{{ day.date }}: $0"></div>
+        {% endif %}
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+    <div style="margin-left:1rem;display:flex;align-items:center;gap:.3rem;font-size:.72rem;color:var(--muted);align-self:flex-end;">
+      <span>Less</span>
+      <div style="width:10px;height:10px;border-radius:2px;background:#e2e8f0;"></div>
+      <div style="width:10px;height:10px;border-radius:2px;background:rgba(59,130,246,.3);"></div>
+      <div style="width:10px;height:10px;border-radius:2px;background:rgba(59,130,246,.6);"></div>
+      <div style="width:10px;height:10px;border-radius:2px;background:rgba(59,130,246,.9);"></div>
+      <span>More</span>
+    </div>
+  </div>
+</div>
+
+<!-- TOP EXPENSES TABLE -->
+<div class="table-card">
+  <div class="table-toolbar">
+    <h2>Top 10 Biggest Expenses</h2>
+  </div>
+  <table>
+    <thead>
+      <tr><th>#</th><th>Date</th><th>Title</th><th>Category</th><th>Amount</th><th>Payment</th></tr>
+    </thead>
+    <tbody>
+      {% for e in top_expenses %}
+      <tr>
+        <td style="color:var(--muted);font-weight:700;">{{ forloop.counter }}</td>
+        <td style="color:var(--muted);">{{ e.date }}</td>
+        <td><strong>{{ e.title }}</strong></td>
+        <td><span class="cat-badge">{{ e.category.name|default:"—" }}</span></td>
+        <td class="amount-cell">${{ e.amount|floatformat:2 }}</td>
+        <td><span class="pay-badge">{{ e.get_payment_method_display }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+const COLORS = ['#3b82f6','#22c55e','#f97316','#a855f7','#ef4444','#14b8a6','#f59e0b','#667eea'];
+const mLabels = {{ monthly_labels|safe }};
+const mTotals = {{ monthly_totals|safe }};
+const momData  = {{ mom_changes|safe }};
+const wLabels  = {{ weekly_labels|safe }};
+const wData    = {{ weekly_data|safe }};
+const stacked  = {{ stacked_datasets|safe }};
+
+// Monthly line chart
+new Chart(document.getElementById('lineChart'), {
+  type: 'line',
+  data: {
+    labels: mLabels,
+    datasets: [{
+      label: 'Monthly Spend',
+      data: mTotals,
+      borderColor: '#3b82f6',
+      backgroundColor: 'rgba(59,130,246,.1)',
+      fill: true,
+      tension: 0.4,
+      pointRadius: 5,
+      pointHoverRadius: 7,
+      pointBackgroundColor: '#3b82f6',
+    }]
+  },
+  options: {
+    responsive: true,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: c => ` $${c.parsed.y.toFixed(2)}` } }
+    },
+    scales: {
+      y: { beginAtZero: true, ticks: { callback: v => '$' + v } },
+      x: { grid: { display: false } }
+    }
+  }
+});
+
+// Month-over-month bar
+new Chart(document.getElementById('momChart'), {
+  type: 'bar',
+  data: {
+    labels: mLabels,
+    datasets: [{
+      label: 'MoM Change %',
+      data: momData,
+      backgroundColor: momData.map(v => v >= 0 ? 'rgba(239,68,68,.7)' : 'rgba(34,197,94,.7)'),
+      borderColor: momData.map(v => v >= 0 ? '#ef4444' : '#22c55e'),
+      borderWidth: 1,
+      borderRadius: 4,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: c => ` ${c.parsed.y > 0 ? '+' : ''}${c.parsed.y}%` } }
+    },
+    scales: {
+      y: { ticks: { callback: v => v + '%' } },
+      x: { grid: { display: false } }
+    }
+  }
+});
+
+// Weekly trend
+new Chart(document.getElementById('weeklyChart'), {
+  type: 'bar',
+  data: {
+    labels: wLabels,
+    datasets: [{
+      label: 'Weekly Spend',
+      data: wData,
+      backgroundColor: 'rgba(168,85,247,.7)',
+      borderColor: '#a855f7',
+      borderWidth: 1,
+      borderRadius: 4,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` $${c.parsed.y.toFixed(2)}` } } },
+    scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + v } }, x: { grid: { display: false } } }
+  }
+});
+
+// Stacked category chart
+new Chart(document.getElementById('stackedChart'), {
+  type: 'bar',
+  data: { labels: mLabels, datasets: stacked },
+  options: {
+    responsive: true,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+      tooltip: { callbacks: { label: c => ` ${c.dataset.label}: $${c.parsed.y.toFixed(2)}` } }
+    },
+    scales: {
+      y: { beginAtZero: true, stacked: true, ticks: { callback: v => '$' + v } },
+      x: { stacked: true, grid: { display: false } }
+    }
+  }
+});
+</script>
+{% endblock %}
