@@ -1,5 +1,6 @@
 from django.db import models
 from django.core.validators import MinValueValidator
+from decimal import Decimal
 import datetime
 
 
@@ -32,7 +33,7 @@ class Expense(models.Model):
     ]
 
     title = models.CharField(max_length=200)
-    amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator("0.01")])
+    amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
     date = models.DateField()
     category = models.ForeignKey(
         Category, on_delete=models.SET_NULL, null=True, blank=True, related_name="expenses"
@@ -55,7 +56,7 @@ class Budget(models.Model):
     )
     year = models.IntegerField()
     month = models.IntegerField()  # 1-12
-    amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator("0.01")])
+    amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
 
     class Meta:
         unique_together = ("category", "year", "month")
