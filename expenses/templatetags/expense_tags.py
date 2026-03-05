@@ -4,6 +4,14 @@ from decimal import Decimal, InvalidOperation
 register = template.Library()
 
 
+@register.filter
+def cat_color_idx(name, color_map):
+    """Return the CSS class index for a category name."""
+    if not color_map or not name:
+        return 0
+    return color_map.get(name, 0)
+
+
 @register.simple_tag(takes_context=True)
 def url_replace(context, key, value):
     """Return query string with one parameter replaced, preserving others."""

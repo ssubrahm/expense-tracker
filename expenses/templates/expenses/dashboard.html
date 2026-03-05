@@ -3,9 +3,9 @@
 {% block content %}
 
 <div class="page-header">
-  <h1 class="page-title" style="margin:0">Dashboard</h1>
-  <div style="display:flex;gap:.5rem;">
-    <a href="{% url 'export_csv' %}?{{ current_qs }}" class="btn btn-success btn-sm">⬇ CSV</a>
+  <h1>Dashboard</h1>
+  <div class="page-actions">
+    <a href="{% url 'export_csv' %}?{{ current_qs }}" class="btn btn-success btn-sm">⬇ Export CSV</a>
   </div>
 </div>
 
@@ -29,11 +29,11 @@
     <div class="stat-value">{{ biggest|inr }}</div>
   </div>
   {% if overall_budget %}
-  <div class="stat-card {% if budget_pct >= 90 %}r{% elif budget_pct >= 70 %}o{% else %}t{% endif %}">
+  <div class="stat-card {% if budget_pct >= 90 %}r{% elif budget_pct >= 70 %}o{% endif %}">
     <div class="stat-label">This Month Budget</div>
     <div class="stat-value">{{ current_month_total|inr }}</div>
-    <div class="budget-bar-wrap">
-      <div class="budget-bar"><div class="budget-bar-fill {% if budget_pct >= 90 %}danger{% elif budget_pct >= 70 %}warn{% endif %}" style="width:{{ budget_pct }}%"></div></div>
+    <div class="budget-bar">
+      <div class="budget-bar-fill {% if budget_pct >= 90 %}danger{% elif budget_pct >= 70 %}warn{% endif %}" style="width:{{ budget_pct }}%"></div>
     </div>
     <div class="stat-sub">{{ budget_pct }}% of {{ overall_budget.amount|inr }} budget</div>
   </div>
@@ -42,13 +42,18 @@
 
 <!-- CATEGORY BUDGET PROGRESS BARS -->
 {% if cat_budgets %}
-<div class="card" style="margin-bottom:1.25rem;">
+<div class="card" style="margin-bottom:1.5rem;">
   <div class="card-title">Category Budget Progress — {{ today|date:"F Y" }}</div>
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.85rem;">
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;">
     {% for cb in cat_budgets %}
     <div>
-      <div style="display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:.3rem;">
-        <span style="font-weight:600;">{{ cb.budget.category.name }}</span>
+      <div style="display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:.35rem;">
+        <span style="font-weight:700;display:flex;align-items:center;gap:.3rem;">
+          {% with ci=cb.budget.category.name %}
+          {% if ci in cat_color_map %}<span class="cat-dot" style="background:{{ chart_colors|default:'[]' }};"></span>{% endif %}
+          {% endwith %}
+          {{ cb.budget.category.name }}
+        </span>
         <span style="color:{% if cb.pct >= 90 %}var(--red){% elif cb.pct >= 70 %}var(--orange){% else %}var(--muted){% endif %}">
           {{ cb.spent|inr }} / {{ cb.budget.amount|inr }}
         </span>
@@ -70,10 +75,10 @@
   <div class="chart-card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.85rem;">
       <div class="chart-title" style="margin:0">Spending Trend</div>
-      <div style="display:flex;gap:.3rem;">
-        <button class="btn btn-outline btn-sm" onclick="setChartType('bar')">Bar</button>
-        <button class="btn btn-outline btn-sm" onclick="setChartType('line')">Line</button>
-        <button class="btn btn-outline btn-sm" onclick="setChartType('stacked')">Stacked</button>
+      <div style="display:flex;gap:.35rem;">
+        <button class="btn btn-outline btn-sm active" id="btnBar" onclick="setChartType('bar')">Bar</button>
+        <button class="btn btn-outline btn-sm" id="btnLine" onclick="setChartType('line')">Line</button>
+        <button class="btn btn-outline btn-sm" id="btnStacked" onclick="setChartType('stacked')">Stacked</button>
       </div>
     </div>
     <canvas id="trendChart"></canvas>
@@ -93,12 +98,9 @@
   <div class="filter-body">
     <form method="get" id="filterForm">
       <div class="filter-grid">
-
-        <!-- Col 1: Search + amount slider -->
         <div class="filter-col">
           <label class="col-title">Search</label>
           <input type="text" name="search" value="{{ filter_form.search.value|default:'' }}" placeholder="Search title or notes…">
-
           <label class="col-title" style="margin-top:.75rem;">Amount Range</label>
           <div class="slider-wrap">
             <div class="slider-track">
@@ -117,8 +119,6 @@
             </div>
           </div>
         </div>
-
-        <!-- Col 2: Date presets + custom range -->
         <div class="filter-col">
           <label class="col-title">Date Period</label>
           {% with preset=filter_form.date_preset.value %}
@@ -132,13 +132,11 @@
           </div>
           {% endwith %}
           <input type="hidden" name="date_preset" id="date_preset" value="{{ filter_form.date_preset.value|default:'' }}">
-          <div style="margin-top:.6rem;display:flex;flex-direction:column;gap:.3rem;">
+          <div style="margin-top:.6rem;display:flex;flex-direction:column;gap:.4rem;">
             <input type="date" name="date_from" value="{{ filter_form.date_from.value|default:'' }}" title="From date">
             <input type="date" name="date_to" value="{{ filter_form.date_to.value|default:'' }}" title="To date">
           </div>
         </div>
-
-        <!-- Col 3: Categories -->
         <div class="filter-col">
           <label class="col-title">Categories</label>
           <div class="check-list">
@@ -147,8 +145,6 @@
             {% endfor %}
           </div>
         </div>
-
-        <!-- Col 4: Payment method -->
         <div class="filter-col">
           <label class="col-title">Payment Method</label>
           <div class="check-list">
@@ -157,18 +153,14 @@
             {% endfor %}
           </div>
         </div>
-
-      </div><!-- end filter-grid -->
-
-      <div style="display:flex;gap:.5rem;margin-top:1rem;align-items:center;flex-wrap:wrap;">
+      </div>
+      <div style="display:flex;gap:.5rem;margin-top:1.25rem;align-items:center;flex-wrap:wrap;">
         <button type="submit" class="btn btn-primary">Apply Filters</button>
         <a href="{% url 'dashboard' %}" class="btn btn-secondary">Clear All</a>
         {% if count %}<span style="color:var(--muted);font-size:.8rem;">{{ count }} result{{ count|pluralize }} · {{ total|inr }}</span>{% endif %}
       </div>
     </form>
   </div>
-
-  <!-- SAVED FILTERS -->
   <div class="saved-filters-row">
     <span style="font-size:.78rem;font-weight:600;color:var(--muted);margin-right:.25rem;">Saved:</span>
     {% for sf in saved_filters %}
@@ -178,18 +170,18 @@
         {% csrf_token %}
         <input type="hidden" name="delete_filter" value="1">
         <input type="hidden" name="filter_id" value="{{ sf.pk }}">
-        <button class="del-btn" type="submit" title="Delete">✕</button>
+        <button class="del-btn" type="submit" title="Delete">×</button>
       </form>
     </a>
     {% empty %}
-    <span style="font-size:.78rem;color:#94a3b8;">No saved filters yet</span>
+    <span style="font-size:.78rem;color:var(--muted);">No saved filters yet</span>
     {% endfor %}
     <form method="post" class="save-filter-form">
       {% csrf_token %}
       <input type="hidden" name="save_filter" value="1">
       <input type="hidden" name="current_qs" value="{{ current_qs }}">
       <input type="text" name="name" placeholder="Name this filter…" required>
-      <button type="submit" class="btn btn-outline btn-sm">💾 Save</button>
+      <button type="submit" class="btn btn-outline btn-sm">Save</button>
     </form>
   </div>
 </div>
@@ -218,10 +210,19 @@
       <tr>
         <td style="color:var(--muted);white-space:nowrap;">{{ e.date }}</td>
         <td><strong>{{ e.title }}</strong></td>
-        <td><span class="cat-badge">{{ e.category.name|default:"—" }}</span></td>
+        <td>
+          <span class="cat-badge">
+            {% with cname=e.category.name|default:"" %}
+            {% if cname and cname in cat_color_map %}
+            <span class="cat-dot" style="background:{{ chart_colors|default:'#8b5cf6' }};"></span>
+            {% endif %}
+            {% endwith %}
+            {{ e.category.name|default:"—" }}
+          </span>
+        </td>
         <td class="amount-cell">{{ e.amount|inr }}</td>
         <td><span class="pay-badge">{{ e.get_payment_method_display }}</span></td>
-        <td style="color:#94a3b8;max-width:180px;">{{ e.notes|truncatechars:45|default:"—" }}</td>
+        <td style="color:var(--muted);max-width:180px;">{{ e.notes|truncatechars:45|default:"—" }}</td>
         <td class="act-btns">
           <a href="{% url 'expense_edit' e.pk %}" class="btn btn-outline btn-sm">Edit</a>
           <a href="{% url 'expense_delete' e.pk %}" class="btn btn-danger btn-sm">Del</a>
@@ -231,13 +232,19 @@
     </tbody>
   </table>
   {% else %}
-  <div class="empty-state"><div class="icon">📭</div><p>No expenses match your filters.</p><a href="{% url 'dashboard' %}" style="color:var(--blue);">Clear filters</a></div>
+  <div class="empty-state">
+    <div class="empty-illustration">📭</div>
+    <h3>No expenses found</h3>
+    <p>Try adjusting your filters or add your first expense to get started.</p>
+    <a href="{% url 'dashboard' %}" class="btn btn-secondary" style="margin-right:.5rem;">Clear filters</a>
+    <a href="{% url 'expense_create' %}" class="btn btn-primary">+ Add Expense</a>
+  </div>
   {% endif %}
 </div>
 
 <!-- BREAKDOWN TABLES -->
 {% if by_category %}
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.25rem;">
+<div class="two-col">
   <div class="card">
     <div class="card-title">By Category</div>
     <table>
@@ -272,18 +279,24 @@
 {% endif %}
 
 <script>
-const COLORS = ['#3b82f6','#22c55e','#f97316','#a855f7','#ef4444','#14b8a6','#f59e0b','#667eea'];
+const COLORS = {{ chart_colors|safe }};
 const monthlyLabels = {{ monthly_labels|safe }};
 const monthlyData   = {{ monthly_data|safe }};
 const stackedDS     = {{ stacked_datasets|safe }};
 const catLabels     = {{ cat_labels|safe }};
 const catData       = {{ cat_data|safe }};
+const chartTheme = function() {
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  return { grid: dark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.06)', text: dark ? '#94a3b8' : '#64748b' };
+};
 
 let trendChart;
 function buildTrend(type) {
   if (trendChart) trendChart.destroy();
   const ctx = document.getElementById('trendChart').getContext('2d');
   const isStacked = type === 'stacked';
+  document.querySelectorAll('#btnBar,#btnLine,#btnStacked').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn' + type.charAt(0).toUpperCase() + type.slice(1)).classList.add('active');
   trendChart = new Chart(ctx, {
     type: isStacked ? 'bar' : type,
     data: {
@@ -291,10 +304,10 @@ function buildTrend(type) {
       datasets: isStacked ? stackedDS : [{
         label: 'Total (₹)',
         data: monthlyData,
-        backgroundColor: type === 'bar' ? 'rgba(59,130,246,.7)' : 'rgba(59,130,246,.1)',
-        borderColor: '#3b82f6',
+        backgroundColor: type === 'bar' ? 'rgba(99,102,241,.7)' : 'rgba(99,102,241,.1)',
+        borderColor: '#6366f1',
         borderWidth: 2,
-        borderRadius: type === 'bar' ? 5 : 0,
+        borderRadius: type === 'bar' ? 6 : 0,
         fill: type === 'line',
         tension: 0.4,
         pointRadius: type === 'line' ? 4 : 0,
@@ -305,12 +318,12 @@ function buildTrend(type) {
       responsive: true,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { display: isStacked, position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } },
-        tooltip: { callbacks: { label: ctx => ` ₹${ctx.parsed.y.toFixed(2)}` } }
+        legend: { display: isStacked, position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12, padding: 12 } },
+        tooltip: { callbacks: { label: ctx => ` ₹${ctx.parsed.y.toLocaleString('en-IN', {minimumFractionDigits: 2})}` } }
       },
       scales: {
-        y: { beginAtZero: true, stacked: isStacked, ticks: { callback: v => '₹' + v } },
-        x: { stacked: isStacked, grid: { display: false } }
+        y: { beginAtZero: true, stacked: isStacked, ticks: { callback: v => '₹' + v.toLocaleString('en-IN'), color: chartTheme().text }, grid: { color: chartTheme().grid } },
+        x: { stacked: isStacked, grid: { display: false }, ticks: { color: chartTheme().text } }
       }
     }
   });
@@ -318,23 +331,23 @@ function buildTrend(type) {
 function setChartType(t) { buildTrend(t); }
 buildTrend('bar');
 
-// Category donut
 new Chart(document.getElementById('categoryChart').getContext('2d'), {
   type: 'doughnut',
   data: {
     labels: catLabels,
-    datasets: [{ data: catData, backgroundColor: COLORS, borderWidth: 2, borderColor: '#fff' }]
+    datasets: [{ data: catData, backgroundColor: COLORS.slice(0, catLabels.length), borderWidth: 2, borderColor: getComputedStyle(document.documentElement).getPropertyValue('--card').trim() || '#fff' }]
   },
   options: {
     responsive: true,
+    cutout: '55%',
     plugins: {
-      legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } },
-      tooltip: { callbacks: { label: ctx => ` ₹${ctx.parsed.toFixed(2)}` } }
+      legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12, padding: 12, color: chartTheme().text } },
+      tooltip: { callbacks: { label: ctx => ` ₹${ctx.parsed.toLocaleString('en-IN', {minimumFractionDigits: 2})}` } }
     }
   }
 });
 
-// RANGE SLIDER
+// Range slider
 (function() {
   const sMin = document.getElementById('sliderMin');
   const sMax = document.getElementById('sliderMax');
@@ -342,13 +355,10 @@ new Chart(document.getElementById('categoryChart').getContext('2d'), {
   const iMax = document.getElementById('amountMaxInput');
   const range = document.getElementById('sliderRange');
   const gmin = parseFloat(sMin.min), gmax = parseFloat(sMax.max);
-
   function updateRange() {
     const lo = parseFloat(sMin.value), hi = parseFloat(sMax.value);
-    const plo = (lo - gmin) / (gmax - gmin) * 100;
-    const phi = (hi - gmin) / (gmax - gmin) * 100;
-    range.style.left = plo + '%';
-    range.style.width = (phi - plo) + '%';
+    range.style.left = ((lo - gmin) / (gmax - gmin) * 100) + '%';
+    range.style.width = (((hi - lo) / (gmax - gmin)) * 100) + '%';
   }
   sMin.addEventListener('input', function() {
     if (parseFloat(sMin.value) > parseFloat(sMax.value)) sMin.value = sMax.value;
@@ -363,7 +373,6 @@ new Chart(document.getElementById('categoryChart').getContext('2d'), {
   updateRange();
 })();
 
-// DATE PRESET
 function setPreset(val) {
   document.getElementById('date_preset').value = val;
   document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));

@@ -3,7 +3,7 @@
 {% block content %}
 
 <div class="page-header">
-  <h1 class="page-title" style="margin:0">Analytics &amp; Insights</h1>
+  <h1>Analytics &amp; Insights</h1>
   <span style="font-size:.82rem;color:var(--muted)">All-time data · {{ today }}</span>
 </div>
 
@@ -28,23 +28,24 @@
   </div>
 </div>
 
-<!-- INSIGHTS -->
-<div class="card" style="margin-bottom:1.25rem;">
+<!-- INSIGHTS (Actionable) -->
+<div class="card" style="margin-bottom:1.5rem;">
   <div class="card-title">💡 Smart Insights</div>
   {% for i in insights %}
   <div class="insight-card {{ i.type }}">
     <span class="insight-icon">{{ i.icon }}</span>
-    <span>{{ i.text }}</span>
+    <div>
+      <span>{{ i.text }}</span>
+      {% if i.nudge %}<span class="insight-nudge">💬 {{ i.nudge }}</span>{% endif %}
+    </div>
   </div>
   {% endfor %}
 </div>
 
 <!-- ROW 1: Monthly trend line + MoM change -->
-<div style="display:grid;grid-template-columns:2fr 1fr;gap:1rem;margin-bottom:1.25rem;">
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:1rem;margin-bottom:1.5rem;">
   <div class="chart-card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.85rem;">
-      <div class="chart-title" style="margin:0">Monthly Spending (Line)</div>
-    </div>
+    <div class="chart-title">Monthly Spending (Line)</div>
     <canvas id="lineChart"></canvas>
   </div>
   <div class="chart-card">
@@ -53,8 +54,8 @@
   </div>
 </div>
 
-<!-- ROW 2: Weekly trend + top 5 category stacked -->
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.25rem;">
+<!-- ROW 2: Weekly trend + top category stacked -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
   <div class="chart-card">
     <div class="chart-title">Weekly Spending (Last 12 Weeks)</div>
     <canvas id="weeklyChart"></canvas>
@@ -66,7 +67,7 @@
 </div>
 
 <!-- ROW 3: Activity heatmap -->
-<div class="card" style="margin-bottom:1.25rem;">
+<div class="card" style="margin-bottom:1.5rem;">
   <div class="card-title">📅 Spending Activity Heatmap (Last 12 Weeks)</div>
   <div style="display:flex;align-items:flex-start;gap:.5rem;overflow-x:auto;padding-bottom:.5rem;">
     <div class="heatmap-day-labels">
@@ -78,15 +79,13 @@
       <div class="heatmap-week">
         {% for day in week %}
         {% if day.amount > 0 %}
-          {% with pct=day.amount|floatformat:0 %}
           <div class="heatmap-cell"
-               style="background: rgba(59,130,246,{{ day.amount|floatformat:2 }});"
+               style="background: rgba(99,102,241,{{ day.amount|floatformat:2 }});"
                data-tip="{{ day.date }}: {{ day.amount|inr }}"
                title="{{ day.date }}: {{ day.amount|inr }}">
           </div>
-          {% endwith %}
         {% else %}
-          <div class="heatmap-cell" title="{{ day.date }}: $0"></div>
+          <div class="heatmap-cell" data-tip="{{ day.date }}: ₹0" title="{{ day.date }}: ₹0"></div>
         {% endif %}
         {% endfor %}
       </div>
@@ -94,10 +93,10 @@
     </div>
     <div style="margin-left:1rem;display:flex;align-items:center;gap:.3rem;font-size:.72rem;color:var(--muted);align-self:flex-end;">
       <span>Less</span>
-      <div style="width:10px;height:10px;border-radius:2px;background:#e2e8f0;"></div>
-      <div style="width:10px;height:10px;border-radius:2px;background:rgba(59,130,246,.3);"></div>
-      <div style="width:10px;height:10px;border-radius:2px;background:rgba(59,130,246,.6);"></div>
-      <div style="width:10px;height:10px;border-radius:2px;background:rgba(59,130,246,.9);"></div>
+      <div style="width:10px;height:10px;border-radius:3px;background:var(--border);"></div>
+      <div style="width:10px;height:10px;border-radius:3px;background:rgba(99,102,241,.3);"></div>
+      <div style="width:10px;height:10px;border-radius:3px;background:rgba(99,102,241,.6);"></div>
+      <div style="width:10px;height:10px;border-radius:3px;background:rgba(99,102,241,.9);"></div>
       <span>More</span>
     </div>
   </div>
@@ -128,15 +127,18 @@
 </div>
 
 <script>
-const COLORS = ['#3b82f6','#22c55e','#f97316','#a855f7','#ef4444','#14b8a6','#f59e0b','#667eea'];
+const COLORS = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#ec4899','#f97316','#14b8a6','#6366f1'];
 const mLabels = {{ monthly_labels|safe }};
 const mTotals = {{ monthly_totals|safe }};
 const momData  = {{ mom_changes|safe }};
 const wLabels  = {{ weekly_labels|safe }};
 const wData    = {{ weekly_data|safe }};
 const stacked  = {{ stacked_datasets|safe }};
+const cTheme = function() {
+  const d = document.documentElement.getAttribute('data-theme') === 'dark';
+  return { grid: d ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.06)', text: d ? '#94a3b8' : '#64748b' };
+};
 
-// Monthly line chart
 new Chart(document.getElementById('lineChart'), {
   type: 'line',
   data: {
@@ -144,30 +146,24 @@ new Chart(document.getElementById('lineChart'), {
     datasets: [{
       label: 'Monthly Spend',
       data: mTotals,
-      borderColor: '#3b82f6',
-      backgroundColor: 'rgba(59,130,246,.1)',
-      fill: true,
-      tension: 0.4,
-      pointRadius: 5,
-      pointHoverRadius: 7,
-      pointBackgroundColor: '#3b82f6',
+      borderColor: '#6366f1',
+      backgroundColor: 'rgba(99,102,241,.1)',
+      fill: true, tension: 0.4,
+      pointRadius: 5, pointHoverRadius: 7,
+      pointBackgroundColor: '#6366f1',
     }]
   },
   options: {
     responsive: true,
     interaction: { mode: 'index', intersect: false },
-    plugins: {
-      legend: { display: false },
-      tooltip: { callbacks: { label: c => ` ₹${c.parsed.y.toFixed(2)}` } }
-    },
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ₹${c.parsed.y.toLocaleString('en-IN', {minimumFractionDigits: 2})}` } } },
     scales: {
-      y: { beginAtZero: true, ticks: { callback: v => '₹' + v } },
-      x: { grid: { display: false } }
+      y: { beginAtZero: true, ticks: { callback: v => '₹' + v.toLocaleString('en-IN'), color: cTheme().text }, grid: { color: cTheme().grid } },
+      x: { grid: { display: false }, ticks: { color: cTheme().text } }
     }
   }
 });
 
-// Month-over-month bar
 new Chart(document.getElementById('momChart'), {
   type: 'bar',
   data: {
@@ -175,26 +171,21 @@ new Chart(document.getElementById('momChart'), {
     datasets: [{
       label: 'MoM Change %',
       data: momData,
-      backgroundColor: momData.map(v => v >= 0 ? 'rgba(239,68,68,.7)' : 'rgba(34,197,94,.7)'),
-      borderColor: momData.map(v => v >= 0 ? '#ef4444' : '#22c55e'),
-      borderWidth: 1,
-      borderRadius: 4,
+      backgroundColor: momData.map(v => v >= 0 ? 'rgba(239,68,68,.7)' : 'rgba(16,185,129,.7)'),
+      borderColor: momData.map(v => v >= 0 ? '#ef4444' : '#10b981'),
+      borderWidth: 1, borderRadius: 5,
     }]
   },
   options: {
     responsive: true,
-    plugins: {
-      legend: { display: false },
-      tooltip: { callbacks: { label: c => ` ${c.parsed.y > 0 ? '+' : ''}${c.parsed.y}%` } }
-    },
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ${c.parsed.y > 0 ? '+' : ''}${c.parsed.y}%` } } },
     scales: {
-      y: { ticks: { callback: v => v + '%' } },
-      x: { grid: { display: false } }
+      y: { ticks: { callback: v => v + '%', color: cTheme().text }, grid: { color: cTheme().grid } },
+      x: { grid: { display: false }, ticks: { color: cTheme().text } }
     }
   }
 });
 
-// Weekly trend
 new Chart(document.getElementById('weeklyChart'), {
   type: 'bar',
   data: {
@@ -202,20 +193,18 @@ new Chart(document.getElementById('weeklyChart'), {
     datasets: [{
       label: 'Weekly Spend',
       data: wData,
-      backgroundColor: 'rgba(168,85,247,.7)',
-      borderColor: '#a855f7',
-      borderWidth: 1,
-      borderRadius: 4,
+      backgroundColor: 'rgba(139,92,246,.7)',
+      borderColor: '#8b5cf6',
+      borderWidth: 1, borderRadius: 5,
     }]
   },
   options: {
     responsive: true,
-    plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ₹${c.parsed.y.toFixed(2)}` } } },
-    scales: { y: { beginAtZero: true, ticks: { callback: v => '₹' + v } }, x: { grid: { display: false } } }
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ₹${c.parsed.y.toLocaleString('en-IN', {minimumFractionDigits: 2})}` } } },
+    scales: { y: { beginAtZero: true, ticks: { callback: v => '₹' + v.toLocaleString('en-IN'), color: cTheme().text }, grid: { color: cTheme().grid } }, x: { grid: { display: false }, ticks: { color: cTheme().text } } }
   }
 });
 
-// Stacked category chart
 new Chart(document.getElementById('stackedChart'), {
   type: 'bar',
   data: { labels: mLabels, datasets: stacked },
@@ -223,12 +212,12 @@ new Chart(document.getElementById('stackedChart'), {
     responsive: true,
     interaction: { mode: 'index', intersect: false },
     plugins: {
-      legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
-      tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ₹${c.parsed.y.toFixed(2)}` } }
+      legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10, padding: 10, color: cTheme().text } },
+      tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ₹${c.parsed.y.toLocaleString('en-IN', {minimumFractionDigits: 2})}` } }
     },
     scales: {
-      y: { beginAtZero: true, stacked: true, ticks: { callback: v => '₹' + v } },
-      x: { stacked: true, grid: { display: false } }
+      y: { beginAtZero: true, stacked: true, ticks: { callback: v => '₹' + v.toLocaleString('en-IN'), color: cTheme().text }, grid: { color: cTheme().grid } },
+      x: { stacked: true, grid: { display: false }, ticks: { color: cTheme().text } }
     }
   }
 });

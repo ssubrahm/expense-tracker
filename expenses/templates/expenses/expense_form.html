@@ -1,22 +1,35 @@
 {% extends "expenses/base.html" %}
 {% block content %}
-<div class="card" style="max-width:560px;margin:0 auto;">
+<div class="form-card">
   <h1>{{ title }}</h1>
-  <form method="post">
+  <form method="post" id="mainForm">
     {% csrf_token %}
     {% for field in form %}
       <div>
         <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {% if field.name == 'amount' %}
+        <div class="amount-input-wrap">
+          {{ field }}
+        </div>
+        {% else %}
         {{ field }}
+        {% endif %}
         {% if field.errors %}
-          <small style="color:#e74c3c;">{{ field.errors|join:", " }}</small>
+          <small class="form-error">{{ field.errors|join:", " }}</small>
         {% endif %}
       </div>
     {% endfor %}
-    <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+    <div class="form-actions">
       <button type="submit" class="btn btn-primary">Save</button>
       <a href="{% url 'dashboard' %}" class="btn btn-secondary">Cancel</a>
+      <span class="kbd-hint"><kbd>Ctrl</kbd>+<kbd>Enter</kbd> to save</span>
     </div>
   </form>
 </div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var first = document.querySelector('.form-card input[type=text], .form-card input[type=number], .form-card select');
+  if (first) first.focus();
+});
+</script>
 {% endblock %}

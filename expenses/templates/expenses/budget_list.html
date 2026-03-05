@@ -2,15 +2,15 @@
 {% load expense_tags %}
 {% block content %}
 <div class="page-header">
-  <h1 class="page-title" style="margin:0">Budgets</h1>
+  <h1>Budgets</h1>
   <a href="{% url 'budget_create' %}" class="btn btn-primary">+ Set Budget</a>
 </div>
 
 {% if budget_data %}
-<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem;margin-bottom:1.25rem;">
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem;margin-bottom:1.5rem;">
   {% for bd in budget_data %}
-  <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.75rem;">
+  <div class="card" style="padding:1.25rem;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.85rem;">
       <div>
         <div style="font-weight:700;font-size:.95rem;">
           {% if bd.budget.category %}{{ bd.budget.category.name }}{% else %}Overall{% endif %}
@@ -22,17 +22,14 @@
         <button type="submit" class="btn btn-danger btn-sm">Delete</button>
       </form>
     </div>
-
-    <div style="display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:.4rem;">
+    <div style="display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:.5rem;">
       <span>Spent: <strong class="amount-cell">{{ bd.spent|inr }}</strong></span>
       <span>Budget: <strong>{{ bd.budget.amount|inr }}</strong></span>
     </div>
-
     <div class="budget-bar-track">
       <div class="budget-bar-fill {% if bd.pct >= 90 %}over{% elif bd.pct >= 70 %}warn{% endif %}" style="width:{{ bd.pct }}%"></div>
     </div>
-
-    <div style="display:flex;justify-content:space-between;margin-top:.4rem;font-size:.78rem;">
+    <div style="display:flex;justify-content:space-between;margin-top:.5rem;font-size:.78rem;">
       <span style="color:var(--muted)">{{ bd.pct }}% used</span>
       {% if bd.remaining >= 0 %}
         <span style="color:var(--green);font-weight:600;">{{ bd.remaining|inr }} left</span>
@@ -44,10 +41,13 @@
   {% endfor %}
 </div>
 {% else %}
-<div class="empty-state card">
-  <div class="icon">📊</div>
-  <p style="margin-bottom:.75rem;">No budgets set yet. Start tracking your spending limits!</p>
-  <a href="{% url 'budget_create' %}" class="btn btn-primary">Set your first budget</a>
+<div class="card">
+  <div class="empty-state">
+    <div class="empty-illustration">🎯</div>
+    <h3>No budgets set yet</h3>
+    <p>Set monthly spending limits to keep your finances on track. You can create budgets for specific categories or an overall monthly limit.</p>
+    <a href="{% url 'budget_create' %}" class="btn btn-primary">Set your first budget</a>
+  </div>
 </div>
 {% endif %}
 {% endblock %}

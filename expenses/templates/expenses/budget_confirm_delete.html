@@ -1,10 +1,14 @@
 {% extends "expenses/base.html" %}
 {% load expense_tags %}
 {% block content %}
-<div class="card" style="max-width:480px;margin:0 auto;">
-  <h1 style="font-size:1.2rem;font-weight:700;margin-bottom:1rem;">Delete Budget</h1>
-  <p>Delete the budget for <strong>{% if budget.category %}{{ budget.category.name }}{% else %}Overall{% endif %}</strong> ({{ budget.month_name }}, {{ budget.amount|inr }})?</p>
-  <form method="post" style="display:flex;gap:.5rem;margin-top:1.25rem;">
+<div class="form-card" style="max-width:480px;text-align:center;">
+  <div style="width:64px;height:64px;background:var(--red-bg);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.5rem;margin:0 auto 1.25rem;">🗑️</div>
+  <h1 style="margin-bottom:.75rem;">Delete Budget</h1>
+  <p style="color:var(--muted);margin-bottom:1.5rem;">
+    Delete the budget for <strong style="color:var(--text);">{% if budget.category %}{{ budget.category.name }}{% else %}Overall{% endif %}</strong>
+    ({{ budget.month_name }}, {{ budget.amount|inr }})?
+  </p>
+  <form method="post" style="display:flex;gap:.5rem;justify-content:center;">
     {% csrf_token %}
     <button type="submit" class="btn btn-danger">Delete</button>
     <a href="{% url 'budget_list' %}" class="btn btn-secondary">Cancel</a>

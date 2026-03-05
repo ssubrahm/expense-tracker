@@ -6,11 +6,11 @@
   <a href="{% url 'export_csv' %}?{{ request.GET.urlencode }}" class="btn btn-success btn-sm">⬇ Export CSV</a>
 </div>
 
-<div class="stats-grid" style="margin-bottom:1.25rem;">
+<div class="stats-grid" style="margin-bottom:1.5rem;">
   <div class="stat-card">
-    <div class="label">Grand Total</div>
-    <div class="value">{{ grand_total|inr }}</div>
-    <div class="sub">across {{ months|length }} month{{ months|length|pluralize }}</div>
+    <div class="stat-label">Grand Total</div>
+    <div class="stat-value">{{ grand_total|inr }}</div>
+    <div class="stat-sub">across {{ months|length }} month{{ months|length|pluralize }}</div>
   </div>
 </div>
 
@@ -18,9 +18,21 @@
 <div class="month-block">
   <div class="month-block-header">
     <span class="month-name">{{ m.month|date:"F Y" }}</span>
-    <span>{{ m.count }} expense{{ m.count|pluralize }} &nbsp;·&nbsp; <span class="month-total">{{ m.total|inr }}</span></span>
+    <span style="display:flex;align-items:center;gap:.75rem;">
+      <span style="color:var(--muted);font-size:.85rem;">{{ m.count }} expense{{ m.count|pluralize }}</span>
+      <span class="month-total">{{ m.total|inr }}</span>
+    </span>
   </div>
-  <div style="border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;overflow:hidden;">
+  <div style="background:var(--card);">
+    {% if m.budget %}
+    <div style="padding:.75rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:1rem;font-size:.82rem;">
+      <span style="color:var(--muted);">Budget: {{ m.budget.amount|inr }}</span>
+      <div class="budget-bar-track" style="flex:1;margin:0;">
+        <div class="budget-bar-fill {% if m.budget_pct >= 90 %}over{% elif m.budget_pct >= 70 %}warn{% endif %}" style="width:{{ m.budget_pct }}%"></div>
+      </div>
+      <span style="font-weight:600;color:{% if m.budget_pct >= 90 %}var(--red){% elif m.budget_pct >= 70 %}var(--orange){% else %}var(--green){% endif %};">{{ m.budget_pct }}%</span>
+    </div>
+    {% endif %}
     <table>
       <thead>
         <tr>
@@ -30,13 +42,13 @@
       <tbody>
         {% for e in m.expenses %}
         <tr>
-          <td style="color:#718096;white-space:nowrap;">{{ e.date }}</td>
+          <td style="color:var(--muted);white-space:nowrap;">{{ e.date }}</td>
           <td><strong>{{ e.title }}</strong></td>
-          <td><span class="category-badge">{{ e.category.name|default:"—" }}</span></td>
+          <td><span class="cat-badge">{{ e.category.name|default:"—" }}</span></td>
           <td class="amount-cell">{{ e.amount|inr }}</td>
-          <td><span class="payment-badge">{{ e.get_payment_method_display }}</span></td>
-          <td style="color:#a0aec0;">{{ e.notes|truncatechars:40|default:"—" }}</td>
-          <td class="actions">
+          <td><span class="pay-badge">{{ e.get_payment_method_display }}</span></td>
+          <td style="color:var(--muted);">{{ e.notes|truncatechars:40|default:"—" }}</td>
+          <td class="act-btns">
             <a href="{% url 'expense_edit' e.pk %}" class="btn btn-outline btn-sm">Edit</a>
             <a href="{% url 'expense_delete' e.pk %}" class="btn btn-danger btn-sm">Del</a>
           </td>
@@ -47,6 +59,13 @@
   </div>
 </div>
 {% empty %}
-<div class="empty-state"><div class="icon">📭</div><p>No expenses found.</p></div>
+<div class="card">
+  <div class="empty-state">
+    <div class="empty-illustration">📅</div>
+    <h3>No expenses found</h3>
+    <p>Start tracking your spending to see monthly breakdowns here.</p>
+    <a href="{% url 'expense_create' %}" class="btn btn-primary">+ Add Expense</a>
+  </div>
+</div>
 {% endfor %}
 {% endblock %}

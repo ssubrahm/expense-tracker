@@ -22,10 +22,16 @@ SORT_FIELDS = {
 }
 
 CHART_COLORS = [
-    "#4299e1", "#48bb78", "#ed8936", "#9f7aea",
-    "#fc8181", "#38b2ac", "#f6ad55", "#667eea",
-    "#e53e3e", "#d69e2e",
+    "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6",
+    "#ef4444", "#06b6d4", "#ec4899", "#f97316",
+    "#14b8a6", "#6366f1",
 ]
+
+
+def get_category_color_map():
+    """Build a persistent mapping of category name -> color index."""
+    cats = list(Category.objects.order_by("id").values_list("name", flat=True))
+    return {name: i % len(CHART_COLORS) for i, name in enumerate(cats)}
 
 
 def apply_filters(request):
@@ -191,6 +197,8 @@ def dashboard(request):
         pct = min(int(spent / b.amount * 100), 100) if b.amount > 0 else 0
         cat_budgets.append({"budget": b, "spent": spent, "pct": pct, "remaining": b.amount - spent})
 
+    cat_color_map = get_category_color_map()
+
     context = {
         "expenses": expenses,
         "filter_form": filter_form,
@@ -217,6 +225,8 @@ def dashboard(request):
         "budget_pct": budget_pct,
         "cat_budgets": cat_budgets,
         "today": today,
+        "cat_color_map": cat_color_map,
+        "chart_colors": json.dumps(CHART_COLORS),
     }
     return render(request, "expenses/dashboard.html", context)
 
@@ -299,7 +309,7 @@ def analytics(request):
     # --- Top expenses ---
     top_expenses = all_expenses.order_by("-amount")[:10]
 
-    # --- Insights ---
+    # --- Actionable Insights (Copilot-style) ---
     insights = []
     if len(monthly_totals) >= 2:
         last = monthly_totals[-1]
@@ -307,30 +317,71 @@ def analytics(request):
         diff = last - prev
         pct = round(abs(diff) / prev * 100, 1) if prev else 0
         if diff > 0:
-            insights.append({"type": "warning", "icon": "📈", "text": f"Spending is up {pct}% vs last month (₹{last:,.2f} vs ₹{prev:,.2f})"})
+            savings = diff
+            insights.append({
+                "type": "warning", "icon": "📈",
+                "text": f"Spending is up {pct}% vs last month (₹{last:,.2f} vs ₹{prev:,.2f})",
+                "nudge": f"Reduce by ₹{savings:,.0f} this month to match last month's level.",
+            })
         else:
-            insights.append({"type": "success", "icon": "📉", "text": f"Spending is down {pct}% vs last month — great job! (₹{last:,.2f} vs ₹{prev:,.2f})"})
+            monthly_saved = abs(diff)
+            yearly_proj = monthly_saved * 12
+            insights.append({
+                "type": "success", "icon": "📉",
+                "text": f"Spending is down {pct}% vs last month — great job!",
+                "nudge": f"At this rate, you'll save ₹{yearly_proj:,.0f} over a year. Keep it up!",
+            })
 
-    # Most expensive category this month
+    # Most expensive category this month with budget context
     this_month_cat = (
         all_expenses.filter(date__year=today.year, date__month=today.month)
         .values("category__name").annotate(t=Sum("amount")).order_by("-t").first()
     )
     if this_month_cat:
-        insights.append({"type": "info", "icon": "🏆", "text": f"Top category this month: {this_month_cat['category__name'] or 'Uncategorised'} (₹{this_month_cat['t']:,.2f})"})
+        cat_name = this_month_cat["category__name"] or "Uncategorised"
+        cat_total = this_month_cat["t"]
+        cat_budget = Budget.objects.filter(
+            category__name=cat_name, year=today.year, month=today.month
+        ).first()
+        nudge = ""
+        if cat_budget and cat_total > cat_budget.amount:
+            over = cat_total - cat_budget.amount
+            nudge = f"You're ₹{over:,.0f} over your {cat_name} budget. Review recent purchases."
+        elif cat_budget:
+            left = cat_budget.amount - cat_total
+            nudge = f"₹{left:,.0f} remaining in your {cat_name} budget this month."
+        else:
+            nudge = f"Consider setting a budget for {cat_name} to stay in control."
+        insights.append({
+            "type": "info", "icon": "🏆",
+            "text": f"Top category this month: {cat_name} (₹{cat_total:,.2f})",
+            "nudge": nudge,
+        })
 
     # Biggest single day
     biggest_day = (
         all_expenses.values("date").annotate(t=Sum("amount")).order_by("-t").first()
     )
     if biggest_day:
-        insights.append({"type": "info", "icon": "🔥", "text": f"Biggest spending day: {biggest_day['date']} (₹{biggest_day['t']:,.2f})"})
+        insights.append({
+            "type": "info", "icon": "🔥",
+            "text": f"Biggest spending day: {biggest_day['date']} (₹{biggest_day['t']:,.2f})",
+            "nudge": "Tip: Space out large purchases across the month to maintain steady cash flow.",
+        })
 
-    # Avg weekend vs weekday
+    # Weekend vs weekday with advice
     weekday_avg = all_expenses.filter(date__week_day__in=[2,3,4,5,6]).aggregate(a=Avg("amount"))["a"] or 0
     weekend_avg = all_expenses.filter(date__week_day__in=[1,7]).aggregate(a=Avg("amount"))["a"] or 0
     if weekday_avg and weekend_avg:
-        insights.append({"type": "info", "icon": "📅", "text": f"Weekend avg expense ₹{weekend_avg:,.2f} vs weekday ₹{weekday_avg:,.2f}"})
+        if float(weekend_avg) > float(weekday_avg) * 1.2:
+            nudge = "Your weekends cost significantly more. Try a no-spend Saturday challenge."
+        else:
+            nudge = "Your spending is well-balanced across the week."
+        insights.append({
+            "type": "info", "icon": "📅",
+            "text": f"Weekend avg ₹{weekend_avg:,.2f} vs weekday ₹{weekday_avg:,.2f}",
+            "nudge": nudge,
+        })
 
     # Most used payment method
     top_payment = (
@@ -338,13 +389,26 @@ def analytics(request):
     )
     if top_payment:
         pm_display = dict(Expense.PAYMENT_CHOICES).get(top_payment["payment_method"], top_payment["payment_method"])
-        insights.append({"type": "info", "icon": "💳", "text": f"Most used payment method: {pm_display} ({top_payment['c']} transactions)"})
+        total_txns = all_expenses.count()
+        pm_pct = round(top_payment["c"] / total_txns * 100) if total_txns else 0
+        nudge = ""
+        if pm_pct > 70:
+            nudge = f"{pm_display} is {pm_pct}% of all transactions. Track cash expenses separately to avoid blind spots."
+        else:
+            nudge = f"Good diversification across payment methods."
+        insights.append({
+            "type": "info", "icon": "💳",
+            "text": f"Most used: {pm_display} ({top_payment['c']} transactions, {pm_pct}%)",
+            "nudge": nudge,
+        })
 
     # Overall stats
     overall = all_expenses.aggregate(
         total=Sum("amount"), avg=Avg("amount"),
         count=Count("id"), biggest=Max("amount"),
     )
+
+    cat_color_map = get_category_color_map()
 
     context = {
         "monthly_labels": json.dumps(monthly_labels),
@@ -360,6 +424,7 @@ def analytics(request):
         "insights": insights,
         "overall": overall,
         "today": today,
+        "cat_color_map": cat_color_map,
     }
     return render(request, "expenses/analytics.html", context)
 
@@ -380,7 +445,7 @@ def budget_list(request):
         pct = min(int(spent / b.amount * 100), 100) if b.amount > 0 else 0
         budget_data.append({"budget": b, "spent": spent, "remaining": remaining, "pct": pct})
 
-    return render(request, "expenses/budget_list.html", {"budget_data": budget_data})
+    return render(request, "expenses/budget_list.html", {"budget_data": budget_data, "cat_color_map": get_category_color_map()})
 
 
 def budget_create(request):
@@ -439,6 +504,7 @@ def monthly_view(request):
         "months": months,
         "filter_form": filter_form,
         "grand_total": expenses.aggregate(t=Sum("amount"))["t"] or 0,
+        "cat_color_map": get_category_color_map(),
     }
     return render(request, "expenses/monthly_view.html", context)
 
@@ -496,7 +562,10 @@ def category_list(request):
     categories = Category.objects.annotate(
         total=Sum("expenses__amount"), count=Count("expenses"),
     ).order_by("name")
-    return render(request, "expenses/category_list.html", {"categories": categories})
+    return render(request, "expenses/category_list.html", {
+        "categories": categories,
+        "cat_color_map": get_category_color_map(),
+    })
 
 
 def category_create(request):
