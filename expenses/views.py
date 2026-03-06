@@ -87,29 +87,8 @@ def apply_filters(request):
 
 
 def dashboard(request):
-    # Saved filter actions
-    saved_filters = SavedFilter.objects.all()
-    if request.method == "POST":
-        if "save_filter" in request.POST:
-            sf_form = SavedFilterForm(request.POST)
-            if sf_form.is_valid():
-                qs = request.POST.get("current_qs", "")
-                SavedFilter.objects.update_or_create(
-                    name=sf_form.cleaned_data["name"],
-                    defaults={"query_string": qs},
-                )
-                messages.success(request, f"Filter '{sf_form.cleaned_data['name']}' saved.")
-            return redirect(request.META.get("HTTP_REFERER", "/"))
-        elif "delete_filter" in request.POST:
-            fid = request.POST.get("filter_id")
-            SavedFilter.objects.filter(pk=fid).delete()
-            messages.success(request, "Saved filter deleted.")
-            return redirect("/")
-
-    expenses, filter_form = apply_filters(request)
-    sort = request.GET.get("sort", "-date")
-    sort_field = SORT_FIELDS.get(sort, "-date")
-    expenses = expenses.order_by(sort_field)
+    expenses = Expense.objects.select_related("category", "spent_by").all()
+    today = date.today()
 
     agg = expenses.aggregate(
         total=Sum("amount"), avg=Avg("amount"),
@@ -134,7 +113,7 @@ def dashboard(request):
         .order_by("-total")
     )
 
-    # Monthly trend (all data for context)
+    # Monthly trend
     monthly_qs = (
         Expense.objects.annotate(month=TruncMonth("date"))
         .values("month").annotate(total=Sum("amount")).order_by("month")
@@ -142,7 +121,7 @@ def dashboard(request):
     monthly_labels = [m["month"].strftime("%b %Y") for m in monthly_qs if m["month"]]
     monthly_data = [float(m["total"]) for m in monthly_qs if m["month"]]
 
-    # Category stacked data per month (top 5 cats)
+    # Category stacked data per month (top 5)
     top_cats = list(
         Expense.objects.values("category__name")
         .annotate(t=Sum("amount")).order_by("-t")
@@ -172,13 +151,7 @@ def dashboard(request):
     cat_labels = [r["category__name"] or "Uncategorised" for r in by_category]
     cat_data = [float(r["total"]) for r in by_category]
 
-    # Amount bounds for slider
-    all_amounts = Expense.objects.aggregate(mn=Min("amount"), mx=Max("amount"))
-    amount_global_min = float(all_amounts["mn"] or 0)
-    amount_global_max = float(all_amounts["mx"] or 1000)
-
     # Budget progress for current month
-    today = date.today()
     current_month_total = (
         Expense.objects.filter(date__year=today.year, date__month=today.month)
         .aggregate(t=Sum("amount"))["t"] or Decimal("0")
@@ -212,11 +185,6 @@ def dashboard(request):
     member_data = [float(r["total"]) for r in by_member]
 
     context = {
-        "expenses": expenses,
-        "filter_form": filter_form,
-        "saved_filters": saved_filters,
-        "save_filter_form": SavedFilterForm(),
-        "sort": sort,
         "total": total,
         "avg_expense": avg_expense,
         "avg_daily": avg_daily,
@@ -232,9 +200,6 @@ def dashboard(request):
         "cat_data": json.dumps(cat_data),
         "member_labels": json.dumps(member_labels),
         "member_data": json.dumps(member_data),
-        "amount_global_min": amount_global_min,
-        "amount_global_max": amount_global_max,
-        "current_qs": request.GET.urlencode(),
         "overall_budget": overall_budget,
         "current_month_total": current_month_total,
         "budget_pct": budget_pct,
@@ -244,6 +209,61 @@ def dashboard(request):
         "chart_colors": json.dumps(CHART_COLORS),
     }
     return render(request, "expenses/dashboard.html", context)
+
+
+def spends(request):
+    """Transactional expense listing with filters, sorting, and saved filters."""
+    saved_filters = SavedFilter.objects.all()
+    if request.method == "POST":
+        if "save_filter" in request.POST:
+            sf_form = SavedFilterForm(request.POST)
+            if sf_form.is_valid():
+                qs = request.POST.get("current_qs", "")
+                SavedFilter.objects.update_or_create(
+                    name=sf_form.cleaned_data["name"],
+                    defaults={"query_string": qs},
+                )
+                messages.success(request, f"Filter '{sf_form.cleaned_data['name']}' saved.")
+            return redirect(request.META.get("HTTP_REFERER", "/spends/"))
+        elif "delete_filter" in request.POST:
+            fid = request.POST.get("filter_id")
+            SavedFilter.objects.filter(pk=fid).delete()
+            messages.success(request, "Saved filter deleted.")
+            return redirect("spends")
+
+    expenses, filter_form = apply_filters(request)
+    sort = request.GET.get("sort", "-date")
+    sort_field = SORT_FIELDS.get(sort, "-date")
+    expenses = expenses.order_by(sort_field)
+
+    agg = expenses.aggregate(
+        total=Sum("amount"), avg=Avg("amount"),
+        biggest=Max("amount"), count=Count("id"),
+    )
+    total = agg["total"] or Decimal("0")
+    count = agg["count"] or 0
+
+    all_amounts = Expense.objects.aggregate(mn=Min("amount"), mx=Max("amount"))
+    amount_global_min = float(all_amounts["mn"] or 0)
+    amount_global_max = float(all_amounts["mx"] or 1000)
+
+    cat_color_map = get_category_color_map()
+
+    context = {
+        "expenses": expenses,
+        "filter_form": filter_form,
+        "saved_filters": saved_filters,
+        "save_filter_form": SavedFilterForm(),
+        "sort": sort,
+        "total": total,
+        "count": count,
+        "amount_global_min": amount_global_min,
+        "amount_global_max": amount_global_max,
+        "current_qs": request.GET.urlencode(),
+        "cat_color_map": cat_color_map,
+        "chart_colors": json.dumps(CHART_COLORS),
+    }
+    return render(request, "expenses/spends.html", context)
 
 
 def analytics(request):

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MySpendTracker</title>
+  <title>OurMoneyTrail</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -131,9 +131,9 @@
       font-weight: 700;
       color: #fff;
     }
-    .brand-name .brand-my { color: #fff; }
-    .brand-name .brand-spend { color: var(--accent); }
-    .brand-name .brand-tracker { color: #94a3b8; font-weight: 600; }
+    .brand-name .brand-our { color: #fff; }
+    .brand-name .brand-money { color: var(--accent); }
+    .brand-name .brand-trail { color: #94a3b8; font-weight: 600; }
     .brand-tagline {
       font-size: .7rem;
       color: #64748b;
@@ -995,7 +995,7 @@
 <div class="brand-bar">
   <div class="brand-name">
     <span class="brand-icon">₹</span>
-    <span><span class="brand-my">My</span><span class="brand-spend">Spend</span><span class="brand-tracker">Tracker</span></span>
+    <span><span class="brand-our">Our</span><span class="brand-money">Money</span><span class="brand-trail">Trail</span></span>
   </div>
   <span class="brand-tagline">FAMILY FINANCE MANAGEMENT</span>
 </div>
@@ -1005,6 +1005,10 @@
   <a href="{% url 'dashboard' %}" class="nav-link desktop-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
     Dashboard
+  </a>
+  <a href="{% url 'spends' %}" class="nav-link desktop-link {% if request.resolver_match.url_name == 'spends' %}active{% endif %}">
+    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H3v16h18V4z"/><path d="M3 10h18"/><path d="M7 4v16"/></svg>
+    Spends
   </a>
   <a href="{% url 'analytics' %}" class="nav-link desktop-link {% if request.resolver_match.url_name == 'analytics' %}active{% endif %}">
     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
@@ -1044,8 +1048,8 @@
   <a href="{% url 'dashboard' %}" {% if request.resolver_match.url_name == 'dashboard' %}class="active"{% endif %}>
     <span class="mob-icon">📊</span>Home
   </a>
-  <a href="{% url 'analytics' %}" {% if request.resolver_match.url_name == 'analytics' %}class="active"{% endif %}>
-    <span class="mob-icon">📈</span>Analytics
+  <a href="{% url 'spends' %}" {% if request.resolver_match.url_name == 'spends' %}class="active"{% endif %}>
+    <span class="mob-icon">💸</span>Spends
   </a>
   <a href="{% url 'expense_create' %}" {% if request.resolver_match.url_name == 'expense_create' %}class="active"{% endif %}>
     <span class="mob-icon">➕</span>Add

@@ -1,0 +1,218 @@
+{% extends "expenses/base.html" %}
+{% load expense_tags %}
+{% block content %}
+
+<div class="page-header">
+  <h1>Spends</h1>
+  <div class="page-actions">
+    <a href="{% url 'export_csv' %}?{{ current_qs }}" class="btn btn-success btn-sm">⬇ Export CSV</a>
+  </div>
+</div>
+
+<!-- FILTER PANEL -->
+<div class="filter-panel">
+  <div class="filter-toggle">
+    <h2>🔎 Filters &amp; Search</h2>
+    <span>▼ Show filters</span>
+  </div>
+  <div class="filter-body">
+    <form method="get" id="filterForm">
+      <div class="filter-grid" style="grid-template-columns:2fr 1.5fr 1fr 1fr 1fr;">
+        <div class="filter-col">
+          <label class="col-title">Search</label>
+          <input type="text" name="search" value="{{ filter_form.search.value|default:'' }}" placeholder="Search title or notes…">
+          <label class="col-title" style="margin-top:.75rem;">Amount Range</label>
+          <div class="slider-wrap">
+            <div class="slider-track">
+              <div class="slider-range" id="sliderRange"></div>
+              <input type="range" id="sliderMin" min="{{ amount_global_min }}" max="{{ amount_global_max }}" step="1" value="{{ filter_form.amount_min.value|default:amount_global_min }}">
+              <input type="range" id="sliderMax" min="{{ amount_global_min }}" max="{{ amount_global_max }}" step="1" value="{{ filter_form.amount_max.value|default:amount_global_max }}">
+            </div>
+            <div class="slider-labels">
+              <span>{{ amount_global_min|inr:0 }}</span>
+              <span>{{ amount_global_max|inr:0 }}</span>
+            </div>
+            <div class="slider-values">
+              <input type="number" id="amountMinInput" name="amount_min" value="{{ filter_form.amount_min.value|default:'' }}" placeholder="Min" step="1" min="0">
+              <span>—</span>
+              <input type="number" id="amountMaxInput" name="amount_max" value="{{ filter_form.amount_max.value|default:'' }}" placeholder="Max" step="1" min="0">
+            </div>
+          </div>
+        </div>
+        <div class="filter-col">
+          <label class="col-title">Date Period</label>
+          {% with preset=filter_form.date_preset.value %}
+          <div class="preset-btns">
+            <button type="button" class="preset-btn {% if preset == 'today' %}active{% endif %}" onclick="setPreset('today')">Today</button>
+            <button type="button" class="preset-btn {% if preset == 'this_week' %}active{% endif %}" onclick="setPreset('this_week')">This Week</button>
+            <button type="button" class="preset-btn {% if preset == 'this_month' %}active{% endif %}" onclick="setPreset('this_month')">This Month</button>
+            <button type="button" class="preset-btn {% if preset == 'last_month' %}active{% endif %}" onclick="setPreset('last_month')">Last Month</button>
+            <button type="button" class="preset-btn {% if preset == 'last_3_months' %}active{% endif %}" onclick="setPreset('last_3_months')">Last 3 Mo</button>
+            <button type="button" class="preset-btn {% if preset == 'this_year' %}active{% endif %}" onclick="setPreset('this_year')">This Year</button>
+          </div>
+          {% endwith %}
+          <input type="hidden" name="date_preset" id="date_preset" value="{{ filter_form.date_preset.value|default:'' }}">
+          <div style="margin-top:.6rem;display:flex;flex-direction:column;gap:.4rem;">
+            <input type="date" name="date_from" value="{{ filter_form.date_from.value|default:'' }}" title="From date">
+            <input type="date" name="date_to" value="{{ filter_form.date_to.value|default:'' }}" title="To date">
+          </div>
+        </div>
+        <div class="filter-col">
+          <label class="col-title">Categories</label>
+          <div class="check-list">
+            {% for cat in filter_form.categories %}
+            <label>{{ cat.tag }} {{ cat.choice_label }}</label>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="filter-col">
+          <label class="col-title">Payment Method</label>
+          <div class="check-list">
+            {% for pm in filter_form.payment_method %}
+            <label>{{ pm.tag }} {{ pm.choice_label }}</label>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="filter-col">
+          <label class="col-title">Family Member</label>
+          <div class="check-list">
+            {% for fm in filter_form.family_members %}
+            <label>{{ fm.tag }} {{ fm.choice_label }}</label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:.5rem;margin-top:1.25rem;align-items:center;flex-wrap:wrap;">
+        <button type="submit" class="btn btn-primary">Apply Filters</button>
+        <a href="{% url 'spends' %}" class="btn btn-secondary">Clear All</a>
+        {% if count %}<span style="color:var(--muted);font-size:.8rem;">{{ count }} result{{ count|pluralize }} · {{ total|inr }}</span>{% endif %}
+      </div>
+    </form>
+  </div>
+  <div class="saved-filters-row">
+    <span style="font-size:.78rem;font-weight:600;color:var(--muted);margin-right:.25rem;">Saved:</span>
+    {% for sf in saved_filters %}
+    <a href="{% url 'spends' %}?{{ sf.query_string }}" class="saved-filter-chip">
+      {{ sf.name }}
+      <form method="post" style="display:inline;" onsubmit="return confirm('Delete this filter?')">
+        {% csrf_token %}
+        <input type="hidden" name="delete_filter" value="1">
+        <input type="hidden" name="filter_id" value="{{ sf.pk }}">
+        <button class="del-btn" type="submit" title="Delete">×</button>
+      </form>
+    </a>
+    {% empty %}
+    <span style="font-size:.78rem;color:var(--muted);">No saved filters yet</span>
+    {% endfor %}
+    <form method="post" class="save-filter-form">
+      {% csrf_token %}
+      <input type="hidden" name="save_filter" value="1">
+      <input type="hidden" name="current_qs" value="{{ current_qs }}">
+      <input type="text" name="name" placeholder="Name this filter…" required>
+      <button type="submit" class="btn btn-outline btn-sm">Save</button>
+    </form>
+  </div>
+</div>
+
+<!-- EXPENSE TABLE -->
+<div class="table-card">
+  <div class="table-toolbar">
+    <h2>Expenses</h2>
+    <span class="table-meta">{{ count }} expense{{ count|pluralize }}</span>
+  </div>
+  {% if expenses %}
+  <table>
+    <thead>
+      <tr>
+        <th><a href="?{% url_replace 'sort' '-date' %}">Date {% if sort == '-date' %}↓{% elif sort == 'date' %}↑{% else %}<span style="opacity:.4">↕</span>{% endif %}</a></th>
+        <th><a href="?{% url_replace 'sort' 'title' %}">Title {% if sort == 'title' %}↑{% elif sort == '-title' %}↓{% else %}<span style="opacity:.4">↕</span>{% endif %}</a></th>
+        <th><a href="?{% url_replace 'sort' 'category' %}">Category {% if sort == 'category' %}↑{% elif sort == '-category' %}↓{% else %}<span style="opacity:.4">↕</span>{% endif %}</a></th>
+        <th>Spent By</th>
+        <th><a href="?{% url_replace 'sort' '-amount' %}">Amount {% if sort == '-amount' %}↓{% elif sort == 'amount' %}↑{% else %}<span style="opacity:.4">↕</span>{% endif %}</a></th>
+        <th>Payment</th>
+        <th>Notes</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in expenses %}
+      <tr>
+        <td style="color:var(--muted);white-space:nowrap;">{{ e.date }}</td>
+        <td><strong>{{ e.title }}</strong></td>
+        <td>
+          <span class="cat-badge">
+            {% with cname=e.category.name|default:"" %}
+            {% if cname and cname in cat_color_map %}
+            <span class="cat-dot" style="background:{{ chart_colors|default:'#8b5cf6' }};"></span>
+            {% endif %}
+            {% endwith %}
+            {{ e.category.name|default:"—" }}
+          </span>
+        </td>
+        <td>
+          {% if e.spent_by %}
+          <div style="display:flex;align-items:center;gap:.3rem;">
+            <div style="width:20px;height:20px;border-radius:50%;background:{{ e.spent_by.avatar_color }};display:flex;align-items:center;justify-content:center;color:#fff;font-size:.55rem;font-weight:700;flex-shrink:0;">{{ e.spent_by.initials }}</div>
+            <span style="font-size:.82rem;">{{ e.spent_by.name }}</span>
+          </div>
+          {% else %}<span style="color:var(--muted);">—</span>{% endif %}
+        </td>
+        <td class="amount-cell">{{ e.amount|inr }}</td>
+        <td><span class="pay-badge">{{ e.get_payment_method_display }}</span></td>
+        <td style="color:var(--muted);max-width:180px;">{{ e.notes|truncatechars:45|default:"—" }}</td>
+        <td class="act-btns">
+          <a href="{% url 'expense_edit' e.pk %}" class="btn btn-outline btn-sm">Edit</a>
+          <a href="{% url 'expense_delete' e.pk %}" class="btn btn-danger btn-sm">Del</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-illustration">📭</div>
+    <h3>No expenses found</h3>
+    <p>Try adjusting your filters or add your first expense to get started.</p>
+    <a href="{% url 'spends' %}" class="btn btn-secondary" style="margin-right:.5rem;">Clear filters</a>
+    <a href="{% url 'expense_create' %}" class="btn btn-primary">+ Add Expense</a>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+// Range slider
+(function() {
+  const sMin = document.getElementById('sliderMin');
+  const sMax = document.getElementById('sliderMax');
+  const iMin = document.getElementById('amountMinInput');
+  const iMax = document.getElementById('amountMaxInput');
+  const range = document.getElementById('sliderRange');
+  if (!sMin) return;
+  const gmin = parseFloat(sMin.min), gmax = parseFloat(sMax.max);
+  function updateRange() {
+    const lo = parseFloat(sMin.value), hi = parseFloat(sMax.value);
+    range.style.left = ((lo - gmin) / (gmax - gmin) * 100) + '%';
+    range.style.width = (((hi - lo) / (gmax - gmin)) * 100) + '%';
+  }
+  sMin.addEventListener('input', function() {
+    if (parseFloat(sMin.value) > parseFloat(sMax.value)) sMin.value = sMax.value;
+    iMin.value = sMin.value; updateRange();
+  });
+  sMax.addEventListener('input', function() {
+    if (parseFloat(sMax.value) < parseFloat(sMin.value)) sMax.value = sMin.value;
+    iMax.value = sMax.value; updateRange();
+  });
+  iMin.addEventListener('change', function() { sMin.value = iMin.value || gmin; updateRange(); });
+  iMax.addEventListener('change', function() { sMax.value = iMax.value || gmax; updateRange(); });
+  updateRange();
+})();
+
+function setPreset(val) {
+  document.getElementById('date_preset').value = val;
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  document.querySelector('[name=date_from]').value = '';
+  document.querySelector('[name=date_to]').value = '';
+}
+</script>
+{% endblock %}
