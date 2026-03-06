@@ -1,0 +1,279 @@
+{% extends "expenses/base.html" %}
+{% load expense_tags %}
+{% block content %}
+
+<div class="page-header">
+  <h1>Reports</h1>
+  <div class="page-actions">
+    <a href="?period=monthly" class="btn {% if period == 'monthly' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">Monthly</a>
+    <a href="?period=quarterly" class="btn {% if period == 'quarterly' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">Quarterly</a>
+    <a href="?period=half_yearly" class="btn {% if period == 'half_yearly' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">Half Yearly</a>
+    <a href="?period=annual" class="btn {% if period == 'annual' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">Annual</a>
+  </div>
+</div>
+
+<!-- REPORT HEADER -->
+<div class="card" style="margin-bottom:1.5rem;">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;">
+    <div>
+      <h2 style="font-size:1.25rem;font-weight:800;margin-bottom:.25rem;">{{ period_label }}</h2>
+      <span style="font-size:.82rem;color:var(--muted);">{{ period_start|date:"d M Y" }} — {{ period_end|date:"d M Y" }}</span>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Total Spent</div>
+      <div style="font-size:1.75rem;font-weight:800;color:var(--text);">{{ total|inr }}</div>
+      {% if change_pct != 0 %}
+      <div style="font-size:.82rem;font-weight:600;color:{% if change_pct > 0 %}var(--red){% else %}var(--green){% endif %};">
+        {% if change_pct > 0 %}▲{% else %}▼{% endif %} {{ change_pct }}% vs previous period ({{ prev_total|inr }})
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- SUMMARY STATS -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-label">Expenses</div>
+    <div class="stat-value">{{ count }}</div>
+    <div class="stat-sub">transactions</div>
+  </div>
+  <div class="stat-card g">
+    <div class="stat-label">Average</div>
+    <div class="stat-value">{{ avg|inr }}</div>
+    <div class="stat-sub">per expense</div>
+  </div>
+  <div class="stat-card o">
+    <div class="stat-label">Largest</div>
+    <div class="stat-value">{{ biggest|inr }}</div>
+  </div>
+  {% if overall_budget_total %}
+  <div class="stat-card {% if overall_gap > 0 %}r{% else %}g{% endif %}">
+    <div class="stat-label">Budget Status</div>
+    <div class="stat-value">
+      {% if overall_gap > 0 %}{{ overall_gap|inr }}{% else %}{{ overall_gap|inr }}{% endif %}
+    </div>
+    <div class="stat-sub">{% if overall_gap > 0 %}over budget ({{ overall_budget_total|inr }}){% else %}under budget ({{ overall_budget_total|inr }}){% endif %}</div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- SPENDING BY CATEGORY vs BUDGET CHART -->
+{% if cat_breakdown %}
+<div class="chart-card" style="margin-bottom:1.5rem;">
+  <div class="chart-title">Spending vs Budget by Category</div>
+  <canvas id="catBudgetChart" style="max-height:300px;"></canvas>
+</div>
+{% endif %}
+
+<!-- CATEGORY BREAKDOWN TABLE -->
+<div class="table-card">
+  <div class="table-toolbar">
+    <h2>Category Breakdown — Budget Comparison</h2>
+    <span class="table-meta">{{ cat_breakdown|length }} categories</span>
+  </div>
+  {% if cat_breakdown %}
+  <table>
+    <thead>
+      <tr>
+        <th>Category</th>
+        <th>Spent</th>
+        <th>Budget</th>
+        <th>Gap</th>
+        <th>% Used</th>
+        <th>Prev Period</th>
+        <th>Change</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for cb in cat_breakdown %}
+      <tr>
+        <td><span class="cat-badge">{{ cb.name }}</span></td>
+        <td class="amount-cell">{{ cb.spent|inr }}</td>
+        <td>{% if cb.budget %}{{ cb.budget|inr }}{% else %}<span style="color:var(--muted)">—</span>{% endif %}</td>
+        <td>
+          {% if cb.gap != None %}
+            {% if cb.gap > 0 %}
+              <span style="color:var(--red);font-weight:600;">+{{ cb.gap|inr }}</span>
+            {% else %}
+              <span style="color:var(--green);font-weight:600;">{{ cb.gap|inr }}</span>
+            {% endif %}
+          {% else %}
+            <span style="color:var(--muted)">—</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if cb.pct_of_budget != None %}
+            <div style="display:flex;align-items:center;gap:.5rem;">
+              <div class="budget-bar-track" style="width:80px;margin:0;">
+                <div class="budget-bar-fill {% if cb.pct_of_budget > 100 %}over{% elif cb.pct_of_budget > 80 %}warn{% endif %}" style="width:{% if cb.pct_of_budget > 100 %}100{% else %}{{ cb.pct_of_budget }}{% endif %}%"></div>
+              </div>
+              <span style="font-size:.78rem;font-weight:600;color:{% if cb.pct_of_budget > 100 %}var(--red){% elif cb.pct_of_budget > 80 %}var(--orange){% else %}var(--green){% endif %};">{{ cb.pct_of_budget }}%</span>
+            </div>
+          {% else %}
+            <span style="color:var(--muted)">—</span>
+          {% endif %}
+        </td>
+        <td style="color:var(--muted);">{% if cb.prev_spent %}{{ cb.prev_spent|inr }}{% else %}—{% endif %}</td>
+        <td>
+          {% if cb.change > 0 %}
+            <span style="color:var(--red);font-size:.82rem;">▲ {{ cb.change|inr }}</span>
+          {% elif cb.change < 0 %}
+            <span style="color:var(--green);font-size:.82rem;">▼ {{ cb.change|inr }}</span>
+          {% else %}
+            <span style="color:var(--muted);font-size:.82rem;">—</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      <!-- TOTALS ROW -->
+      <tr style="font-weight:700;background:var(--light);">
+        <td>Total</td>
+        <td class="amount-cell">{{ total|inr }}</td>
+        <td>{% if overall_budget_total %}{{ overall_budget_total|inr }}{% else %}—{% endif %}</td>
+        <td>
+          {% if overall_gap != None %}
+            {% if overall_gap > 0 %}
+              <span style="color:var(--red);">+{{ overall_gap|inr }}</span>
+            {% else %}
+              <span style="color:var(--green);">{{ overall_gap|inr }}</span>
+            {% endif %}
+          {% else %}—{% endif %}
+        </td>
+        <td></td>
+        <td style="color:var(--muted);">{{ prev_total|inr }}</td>
+        <td>
+          {% if change_pct > 0 %}
+            <span style="color:var(--red);font-size:.82rem;">▲ {{ change_pct }}%</span>
+          {% elif change_pct < 0 %}
+            <span style="color:var(--green);font-size:.82rem;">▼ {{ change_pct }}%</span>
+          {% endif %}
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-illustration">📋</div>
+    <h3>No expenses for this period</h3>
+    <p>Add expenses to generate reports.</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- PAYMENT METHOD BREAKDOWN -->
+{% if pay_breakdown %}
+<div class="card" style="margin-bottom:1.5rem;">
+  <div class="card-title">Payment Method Summary</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem;">
+    {% for pm in pay_breakdown %}
+    <div style="display:flex;justify-content:space-between;padding:.5rem 0;border-bottom:1px solid var(--border);">
+      <span class="pay-badge">{{ pm.payment_method|title }}</span>
+      <span style="font-weight:700;color:var(--green);">{{ pm.total|inr }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- ===== ASSESSMENT SECTION ===== -->
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
+
+  <!-- The Good -->
+  <div class="card" style="border-top:4px solid var(--green);">
+    <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:1rem;">
+      <span style="font-size:1.5rem;">✅</span>
+      <h3 style="font-size:1rem;font-weight:800;color:var(--green);">The Good</h3>
+    </div>
+    {% for item in the_good %}
+    <div style="padding:.6rem .75rem;background:var(--green-bg);border-radius:var(--radius-sm);margin-bottom:.5rem;font-size:.85rem;line-height:1.5;">
+      {{ item }}
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- The Not So Good -->
+  <div class="card" style="border-top:4px solid var(--orange);">
+    <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:1rem;">
+      <span style="font-size:1.5rem;">⚠️</span>
+      <h3 style="font-size:1rem;font-weight:800;color:var(--orange);">The Not So Good</h3>
+    </div>
+    {% for item in the_not_so_good %}
+    <div style="padding:.6rem .75rem;background:var(--orange-bg);border-radius:var(--radius-sm);margin-bottom:.5rem;font-size:.85rem;line-height:1.5;">
+      {{ item }}
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Recommendations -->
+  <div class="card" style="border-top:4px solid var(--accent);">
+    <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:1rem;">
+      <span style="font-size:1.5rem;">💡</span>
+      <h3 style="font-size:1rem;font-weight:800;color:var(--accent);">Recommendations</h3>
+    </div>
+    {% for item in recommendations %}
+    <div style="padding:.6rem .75rem;background:var(--purple-bg);border-radius:var(--radius-sm);margin-bottom:.5rem;font-size:.85rem;line-height:1.5;">
+      {{ item }}
+    </div>
+    {% endfor %}
+  </div>
+
+</div>
+
+<style>
+  @media(max-width:900px) {
+    div[style*="grid-template-columns:1fr 1fr 1fr"] { grid-template-columns: 1fr !important; }
+  }
+</style>
+
+{% if cat_breakdown %}
+<script>
+const catLabels = {{ chart_labels|safe }};
+const catSpent = {{ chart_spent|safe }};
+const catBudget = {{ chart_budget|safe }};
+const cTheme = function() {
+  const d = document.documentElement.getAttribute('data-theme') === 'dark';
+  return { grid: d ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.06)', text: d ? '#94a3b8' : '#64748b' };
+};
+
+new Chart(document.getElementById('catBudgetChart'), {
+  type: 'bar',
+  data: {
+    labels: catLabels,
+    datasets: [
+      {
+        label: 'Spent',
+        data: catSpent,
+        backgroundColor: 'rgba(99,102,241,.7)',
+        borderColor: '#6366f1',
+        borderWidth: 1,
+        borderRadius: 5,
+      },
+      {
+        label: 'Budget',
+        data: catBudget,
+        backgroundColor: 'rgba(16,185,129,.25)',
+        borderColor: '#10b981',
+        borderWidth: 2,
+        borderDash: [5, 5],
+        borderRadius: 5,
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { position: 'top', labels: { font: { size: 11, family: "'Inter', sans-serif" }, boxWidth: 12, color: cTheme().text } },
+      tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ₹${c.parsed.y.toLocaleString('en-IN', {minimumFractionDigits: 2})}` } }
+    },
+    scales: {
+      y: { beginAtZero: true, ticks: { callback: v => '₹' + v.toLocaleString('en-IN'), color: cTheme().text }, grid: { color: cTheme().grid } },
+      x: { grid: { display: false }, ticks: { color: cTheme().text } }
+    }
+  }
+});
+</script>
+{% endif %}
+
+{% endblock %}

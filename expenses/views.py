@@ -558,6 +558,224 @@ def expense_delete(request, pk):
     return render(request, "expenses/expense_confirm_delete.html", {"expense": expense})
 
 
+def reports(request):
+    """Spending reports: monthly, quarterly, half-yearly, annual with budget comparison."""
+    today = date.today()
+    period = request.GET.get("period", "monthly")
+
+    # Build period ranges
+    if period == "quarterly":
+        q = (today.month - 1) // 3
+        period_start = date(today.year, q * 3 + 1, 1)
+        period_end = today
+        period_label = f"Q{q + 1} {today.year}"
+        prev_start = date(today.year if q > 0 else today.year - 1, (q - 1) * 3 + 1 if q > 0 else 10, 1)
+        prev_end = period_start - timedelta(days=1)
+    elif period == "half_yearly":
+        if today.month <= 6:
+            period_start = date(today.year, 1, 1)
+            period_label = f"H1 {today.year}"
+            prev_start = date(today.year - 1, 7, 1)
+            prev_end = date(today.year - 1, 12, 31)
+        else:
+            period_start = date(today.year, 7, 1)
+            period_label = f"H2 {today.year}"
+            prev_start = date(today.year, 1, 1)
+            prev_end = date(today.year, 6, 30)
+        period_end = today
+    elif period == "annual":
+        period_start = date(today.year, 1, 1)
+        period_end = today
+        period_label = f"FY {today.year}"
+        prev_start = date(today.year - 1, 1, 1)
+        prev_end = date(today.year - 1, 12, 31)
+    else:  # monthly
+        period_start = today.replace(day=1)
+        period_end = today
+        period_label = today.strftime("%B %Y")
+        prev_end = period_start - timedelta(days=1)
+        prev_start = prev_end.replace(day=1)
+
+    # Current period expenses
+    expenses = Expense.objects.filter(date__gte=period_start, date__lte=period_end)
+    prev_expenses = Expense.objects.filter(date__gte=prev_start, date__lte=prev_end)
+
+    # Summary stats
+    agg = expenses.aggregate(
+        total=Sum("amount"), avg=Avg("amount"), count=Count("id"),
+        biggest=Max("amount"),
+    )
+    total = agg["total"] or Decimal("0")
+    prev_total = prev_expenses.aggregate(t=Sum("amount"))["t"] or Decimal("0")
+    change_pct = round(float(total - prev_total) / float(prev_total) * 100, 1) if prev_total else 0
+
+    # Category breakdown with budget comparison
+    cat_breakdown = []
+    cat_spending = (
+        expenses.values("category__name", "category__id")
+        .annotate(total=Sum("amount"), count=Count("id"))
+        .order_by("-total")
+    )
+
+    for cs in cat_spending:
+        cat_name = cs["category__name"] or "Uncategorised"
+        cat_id = cs["category__id"]
+        spent = cs["total"]
+
+        # Sum budgets for this category across all months in the period
+        budgets_in_period = Budget.objects.filter(
+            category_id=cat_id,
+            year__gte=period_start.year, year__lte=period_end.year,
+        )
+        # Filter months within period range
+        total_budget = Decimal("0")
+        for b in budgets_in_period:
+            b_date = date(b.year, b.month, 1)
+            if period_start <= b_date <= period_end:
+                total_budget += b.amount
+
+        gap = spent - total_budget if total_budget > 0 else None
+        pct_of_budget = round(float(spent) / float(total_budget) * 100) if total_budget > 0 else None
+
+        # Previous period for this category
+        prev_cat_total = prev_expenses.filter(category_id=cat_id).aggregate(
+            t=Sum("amount")
+        )["t"] or Decimal("0")
+
+        cat_breakdown.append({
+            "name": cat_name,
+            "spent": spent,
+            "count": cs["count"],
+            "budget": total_budget if total_budget > 0 else None,
+            "gap": gap,
+            "pct_of_budget": pct_of_budget,
+            "prev_spent": prev_cat_total,
+            "change": spent - prev_cat_total,
+        })
+
+    # Payment method breakdown
+    pay_breakdown = (
+        expenses.values("payment_method")
+        .annotate(total=Sum("amount"), count=Count("id"))
+        .order_by("-total")
+    )
+
+    # Overall budget for the period
+    overall_budgets = Budget.objects.filter(
+        category__isnull=True,
+        year__gte=period_start.year, year__lte=period_end.year,
+    )
+    overall_budget_total = Decimal("0")
+    for b in overall_budgets:
+        b_date = date(b.year, b.month, 1)
+        if period_start <= b_date <= period_end:
+            overall_budget_total += b.amount
+
+    overall_gap = total - overall_budget_total if overall_budget_total > 0 else None
+
+    # THE GOOD, THE NOT SO GOOD, AND RECOMMENDATIONS
+    the_good = []
+    the_not_so_good = []
+    recommendations = []
+
+    # Analyse: categories under budget
+    for cb in cat_breakdown:
+        if cb["budget"] and cb["gap"] is not None:
+            if cb["gap"] < 0:  # Under budget
+                the_good.append(
+                    f"{cb['name']}: ₹{abs(cb['gap']):,.0f} under budget "
+                    f"({cb['pct_of_budget']}% of allocation used)"
+                )
+            elif cb["gap"] > 0:  # Over budget
+                the_not_so_good.append(
+                    f"{cb['name']}: ₹{cb['gap']:,.0f} over budget "
+                    f"({cb['pct_of_budget']}% of allocation used)"
+                )
+                recommendations.append(
+                    f"Review {cb['name']} spending and set tighter weekly limits. "
+                    f"Consider reducing by ₹{cb['gap']:,.0f} next period."
+                )
+
+    # Analyse: spending trend vs previous period
+    if prev_total > 0:
+        if total > prev_total:
+            pct_up = round(float(total - prev_total) / float(prev_total) * 100, 1)
+            the_not_so_good.append(
+                f"Overall spending increased by {pct_up}% compared to previous period."
+            )
+            recommendations.append(
+                f"Target a {min(pct_up, 15):.0f}% reduction next period by "
+                f"focusing on the top over-budget categories."
+            )
+        else:
+            pct_down = round(float(prev_total - total) / float(prev_total) * 100, 1)
+            the_good.append(
+                f"Overall spending decreased by {pct_down}% vs previous period — keep it up!"
+            )
+
+    # Analyse: categories with big jumps
+    for cb in cat_breakdown:
+        if cb["prev_spent"] > 0 and cb["change"] > 0:
+            jump_pct = round(float(cb["change"]) / float(cb["prev_spent"]) * 100, 1)
+            if jump_pct > 30:
+                the_not_so_good.append(
+                    f"{cb['name']} spending jumped {jump_pct}% vs previous period "
+                    f"(₹{cb['prev_spent']:,.0f} → ₹{cb['spent']:,.0f})"
+                )
+        elif cb["prev_spent"] > 0 and cb["change"] < 0:
+            drop_pct = round(float(abs(cb["change"])) / float(cb["prev_spent"]) * 100, 1)
+            if drop_pct > 20:
+                the_good.append(
+                    f"{cb['name']} spending dropped {drop_pct}% vs previous period — well managed."
+                )
+
+    # Categories without budgets
+    unbudgeted = [cb["name"] for cb in cat_breakdown if cb["budget"] is None and cb["name"] != "Uncategorised"]
+    if unbudgeted:
+        recommendations.append(
+            f"Set budgets for: {', '.join(unbudgeted[:3])}{'...' if len(unbudgeted) > 3 else ''}. "
+            f"Without limits, these categories can grow unchecked."
+        )
+
+    # Default messages if nothing to report
+    if not the_good:
+        the_good.append("Keep tracking your expenses to build positive spending patterns.")
+    if not the_not_so_good:
+        the_not_so_good.append("No major spending concerns detected for this period.")
+    if not recommendations:
+        recommendations.append("Continue maintaining your current spending discipline.")
+
+    # Chart data for category bar chart
+    chart_labels = [cb["name"] for cb in cat_breakdown[:8]]
+    chart_spent = [float(cb["spent"]) for cb in cat_breakdown[:8]]
+    chart_budget = [float(cb["budget"]) if cb["budget"] else 0 for cb in cat_breakdown[:8]]
+
+    context = {
+        "period": period,
+        "period_label": period_label,
+        "period_start": period_start,
+        "period_end": period_end,
+        "total": total,
+        "prev_total": prev_total,
+        "change_pct": change_pct,
+        "count": agg["count"] or 0,
+        "avg": agg["avg"] or Decimal("0"),
+        "biggest": agg["biggest"] or Decimal("0"),
+        "cat_breakdown": cat_breakdown,
+        "pay_breakdown": pay_breakdown,
+        "overall_budget_total": overall_budget_total,
+        "overall_gap": overall_gap,
+        "the_good": the_good,
+        "the_not_so_good": the_not_so_good,
+        "recommendations": recommendations,
+        "chart_labels": json.dumps(chart_labels),
+        "chart_spent": json.dumps(chart_spent),
+        "chart_budget": json.dumps(chart_budget),
+        "today": today,
+    }
+    return render(request, "expenses/reports.html", context)
+
+
 def category_list(request):
     categories = Category.objects.annotate(
         total=Sum("expenses__amount"), count=Count("expenses"),
