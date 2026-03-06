@@ -511,19 +511,65 @@ def budget_list(request):
     today = date.today()
     budgets = Budget.objects.select_related("category").order_by("-year", "-month")
 
-    budget_data = []
+    cat_budget_data = []
+    overall_budget_data = []
+
+    # Sum of category budgets per month (for reference on overall cards)
+    cat_sums = defaultdict(Decimal)
+
     for b in budgets:
-        spent = (
-            Expense.objects.filter(
-                date__year=b.year, date__month=b.month,
-                category=b.category,
-            ).aggregate(t=Sum("amount"))["t"] or Decimal("0")
-        )
+        if b.category:
+            spent = (
+                Expense.objects.filter(
+                    date__year=b.year, date__month=b.month,
+                    category=b.category,
+                ).aggregate(t=Sum("amount"))["t"] or Decimal("0")
+            )
+            cat_sums[(b.year, b.month)] += b.amount
+        else:
+            spent = (
+                Expense.objects.filter(date__year=b.year, date__month=b.month)
+                .aggregate(t=Sum("amount"))["t"] or Decimal("0")
+            )
         remaining = b.amount - spent
         pct = min(int(spent / b.amount * 100), 100) if b.amount > 0 else 0
-        budget_data.append({"budget": b, "spent": spent, "remaining": remaining, "pct": pct})
+        entry = {"budget": b, "spent": spent, "remaining": remaining, "pct": pct}
+        if b.category:
+            cat_budget_data.append(entry)
+        else:
+            overall_budget_data.append(entry)
 
-    return render(request, "expenses/budget_list.html", {"budget_data": budget_data, "cat_color_map": get_category_color_map()})
+    # Auto-create overall budget for current month if category budgets exist but no overall
+    current_cat_sum = cat_sums.get((today.year, today.month), Decimal("0"))
+    has_current_overall = any(
+        o["budget"].year == today.year and o["budget"].month == today.month
+        for o in overall_budget_data
+    )
+    if current_cat_sum > 0 and not has_current_overall:
+        overall, created = Budget.objects.get_or_create(
+            category=None, year=today.year, month=today.month,
+            defaults={"amount": current_cat_sum},
+        )
+        if created:
+            spent = (
+                Expense.objects.filter(date__year=today.year, date__month=today.month)
+                .aggregate(t=Sum("amount"))["t"] or Decimal("0")
+            )
+            remaining = overall.amount - spent
+            pct = min(int(spent / overall.amount * 100), 100) if overall.amount > 0 else 0
+            overall_budget_data.insert(0, {
+                "budget": overall, "spent": spent, "remaining": remaining, "pct": pct,
+            })
+
+    # Attach category sum reference to each overall entry
+    for o in overall_budget_data:
+        o["cat_sum"] = cat_sums.get((o["budget"].year, o["budget"].month), Decimal("0"))
+
+    return render(request, "expenses/budget_list.html", {
+        "cat_budget_data": cat_budget_data,
+        "overall_budget_data": overall_budget_data,
+        "cat_color_map": get_category_color_map(),
+    })
 
 
 def budget_create(request):
@@ -537,6 +583,22 @@ def budget_create(request):
         today = date.today()
         form = BudgetForm(initial={"year": today.year, "month": today.month})
     return render(request, "expenses/budget_form.html", {"form": form, "title": "Set Budget"})
+
+
+def budget_edit(request, pk):
+    budget = get_object_or_404(Budget, pk=pk)
+    if request.method == "POST":
+        form = BudgetForm(request.POST, instance=budget)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Budget updated.")
+            return redirect("budget_list")
+    else:
+        form = BudgetForm(instance=budget)
+    cat_name = budget.category.name if budget.category else "Overall"
+    return render(request, "expenses/budget_form.html", {
+        "form": form, "title": f"Edit Budget — {cat_name}", "budget": budget,
+    })
 
 
 def budget_delete(request, pk):

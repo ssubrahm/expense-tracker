@@ -6,21 +6,69 @@
   <a href="{% url 'budget_create' %}" class="btn btn-primary">+ Set Budget</a>
 </div>
 
-{% if budget_data %}
+<!-- OVERALL BUDGETS -->
+{% if overall_budget_data %}
+<div style="margin-bottom:1.5rem;">
+  {% for od in overall_budget_data %}
+  <div class="card" style="margin-bottom:1rem;border-left:4px solid var(--accent);">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.75rem;">
+      <div>
+        <div style="font-weight:800;font-size:1.1rem;">Overall — {{ od.budget.month_name }}</div>
+        {% if od.cat_sum and od.cat_sum != od.budget.amount %}
+        <div style="font-size:.75rem;color:var(--muted);">
+          Sum of category budgets: {{ od.cat_sum|inr }}
+          {% if od.budget.amount != od.cat_sum %}· <span style="color:var(--orange);">overridden</span>{% endif %}
+        </div>
+        {% elif od.cat_sum %}
+        <div style="font-size:.75rem;color:var(--muted);">Matches sum of category budgets</div>
+        {% endif %}
+      </div>
+      <div class="act-btns">
+        <a href="{% url 'budget_edit' od.budget.pk %}" class="btn btn-outline btn-sm">Edit</a>
+        <form method="post" action="{% url 'budget_delete' od.budget.pk %}" style="display:inline;" onsubmit="return confirm('Delete this overall budget?')">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-danger btn-sm">Del</button>
+        </form>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:.5rem;">
+      <span>Spent: <strong class="amount-cell">{{ od.spent|inr }}</strong></span>
+      <span>Budget: <strong>{{ od.budget.amount|inr }}</strong></span>
+    </div>
+    <div class="budget-bar-track">
+      <div class="budget-bar-fill {% if od.pct >= 90 %}over{% elif od.pct >= 70 %}warn{% endif %}" style="width:{{ od.pct }}%"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:.5rem;font-size:.78rem;">
+      <span style="color:var(--muted)">{{ od.pct }}% used</span>
+      {% if od.remaining >= 0 %}
+        <span style="color:var(--green);font-weight:600;">{{ od.remaining|inr }} left</span>
+      {% else %}
+        <span style="color:var(--red);font-weight:600;">Over by {{ od.remaining|inr }}</span>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- CATEGORY BUDGETS -->
+{% if cat_budget_data %}
+<h2 style="font-size:1rem;font-weight:700;margin-bottom:1rem;">Category Budgets</h2>
 <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem;margin-bottom:1.5rem;">
-  {% for bd in budget_data %}
+  {% for bd in cat_budget_data %}
   <div class="card" style="padding:1.25rem;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.85rem;">
       <div>
-        <div style="font-weight:700;font-size:.95rem;">
-          {% if bd.budget.category %}{{ bd.budget.category.name }}{% else %}Overall{% endif %}
-        </div>
+        <div style="font-weight:700;font-size:.95rem;">{{ bd.budget.category.name }}</div>
         <div style="font-size:.78rem;color:var(--muted);">{{ bd.budget.month_name }}</div>
       </div>
-      <form method="post" action="{% url 'budget_delete' bd.budget.pk %}" onsubmit="return confirm('Delete this budget?')">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-danger btn-sm">Delete</button>
-      </form>
+      <div class="act-btns">
+        <a href="{% url 'budget_edit' bd.budget.pk %}" class="btn btn-outline btn-sm">Edit</a>
+        <form method="post" action="{% url 'budget_delete' bd.budget.pk %}" style="display:inline;" onsubmit="return confirm('Delete this budget?')">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-danger btn-sm">Del</button>
+        </form>
+      </div>
     </div>
     <div style="display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:.5rem;">
       <span>Spent: <strong class="amount-cell">{{ bd.spent|inr }}</strong></span>
@@ -40,12 +88,13 @@
   </div>
   {% endfor %}
 </div>
-{% else %}
+
+{% elif not overall_budget_data %}
 <div class="card">
   <div class="empty-state">
     <div class="empty-illustration">🎯</div>
     <h3>No budgets set yet</h3>
-    <p>Set monthly spending limits to keep your finances on track. You can create budgets for specific categories or an overall monthly limit.</p>
+    <p>Set monthly spending limits per category. An overall budget is auto-created from the sum of your category budgets, but you can override it anytime.</p>
     <a href="{% url 'budget_create' %}" class="btn btn-primary">Set your first budget</a>
   </div>
 </div>

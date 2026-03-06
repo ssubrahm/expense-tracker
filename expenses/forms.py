@@ -36,6 +36,10 @@ class BudgetForm(forms.ModelForm):
             "month": forms.Select(choices=[(i, f"{i:02d}") for i in range(1, 13)]),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["category"].empty_label = "Overall (all categories)"
+
 
 class SavedFilterForm(forms.ModelForm):
     class Meta:
