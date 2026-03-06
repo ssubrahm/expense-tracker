@@ -262,6 +262,21 @@ def spends(request):
             SavedFilter.objects.filter(pk=fid).delete()
             messages.success(request, "Saved filter deleted.")
             return redirect("spends")
+        elif "bulk_action" in request.POST:
+            selected = request.POST.getlist("selected")
+            action = request.POST.get("bulk_action")
+            if selected:
+                qs = Expense.objects.filter(pk__in=selected)
+                if action == "delete":
+                    count_del = qs.count()
+                    qs.delete()
+                    messages.success(request, f"{count_del} expense(s) deleted.")
+                elif action in dict(Expense.RECURRENCE_CHOICES):
+                    qs.update(recurrence=action, is_recurring_source=(action != "one_time"))
+                    messages.success(request, f"{qs.count()} expense(s) set to {dict(Expense.RECURRENCE_CHOICES)[action]}.")
+            else:
+                messages.warning(request, "No expenses selected.")
+            return redirect("spends")
 
     expenses, filter_form = apply_filters(request)
     sort = request.GET.get("sort", "-date")
@@ -294,6 +309,7 @@ def spends(request):
         "current_qs": request.GET.urlencode(),
         "cat_color_map": cat_color_map,
         "chart_colors": json.dumps(CHART_COLORS),
+        "recurrence_choices": Expense.RECURRENCE_CHOICES,
     }
     return render(request, "expenses/spends.html", context)
 
@@ -540,6 +556,17 @@ def analytics(request):
 
 
 def budget_list(request):
+    if request.method == "POST" and "bulk_action" in request.POST:
+        selected = request.POST.getlist("selected")
+        action = request.POST.get("bulk_action")
+        if selected and action == "delete":
+            count_del = Budget.objects.filter(pk__in=selected).count()
+            Budget.objects.filter(pk__in=selected).delete()
+            messages.success(request, f"{count_del} budget(s) deleted.")
+        else:
+            messages.warning(request, "No budgets selected.")
+        return redirect("budget_list")
+
     today = date.today()
     budgets = Budget.objects.select_related("category").order_by("-year", "-month")
 

@@ -115,15 +115,31 @@
 </div>
 
 <!-- EXPENSE TABLE -->
+<form method="post" id="bulkForm">
+{% csrf_token %}
 <div class="table-card">
   <div class="table-toolbar">
     <h2>Expenses</h2>
-    <span class="table-meta">{{ count }} expense{{ count|pluralize }}</span>
+    <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
+      <span class="table-meta">{{ count }} expense{{ count|pluralize }}</span>
+      <span id="bulkBar" style="display:none;align-items:center;gap:.4rem;margin-left:.5rem;">
+        <span style="font-size:.8rem;font-weight:600;color:var(--accent);" id="selCount">0 selected</span>
+        <select name="bulk_action" style="width:auto;padding:.3rem .6rem;font-size:.78rem;margin:0;">
+          <option value="">— Bulk action —</option>
+          <option value="delete">🗑 Delete selected</option>
+          {% for val, label in recurrence_choices %}
+          <option value="{{ val }}">🔄 Set {{ label }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-primary btn-sm" onclick="return confirm('Apply bulk action to selected expenses?')">Apply</button>
+      </span>
+    </div>
   </div>
   {% if expenses %}
   <table>
     <thead>
       <tr>
+        <th style="width:36px;"><input type="checkbox" id="selectAll" style="width:auto;margin:0;" title="Select all"></th>
         <th><a href="?{% url_replace 'sort' '-date' %}">Date {% if sort == '-date' %}↓{% elif sort == 'date' %}↑{% else %}<span style="opacity:.4">↕</span>{% endif %}</a></th>
         <th><a href="?{% url_replace 'sort' 'title' %}">Title {% if sort == 'title' %}↑{% elif sort == '-title' %}↓{% else %}<span style="opacity:.4">↕</span>{% endif %}</a></th>
         <th><a href="?{% url_replace 'sort' 'category' %}">Category {% if sort == 'category' %}↑{% elif sort == '-category' %}↓{% else %}<span style="opacity:.4">↕</span>{% endif %}</a></th>
@@ -138,6 +154,7 @@
     <tbody>
       {% for e in expenses %}
       <tr>
+        <td><input type="checkbox" name="selected" value="{{ e.pk }}" class="row-check" style="width:auto;margin:0;"></td>
         <td style="color:var(--muted);white-space:nowrap;">{{ e.date }}</td>
         <td><strong>{{ e.title }}</strong></td>
         <td>
@@ -188,7 +205,30 @@
   </div>
   {% endif %}
 </div>
+</form>
 
+<script>
+// Bulk select
+(function(){
+  const all = document.getElementById('selectAll');
+  const bar = document.getElementById('bulkBar');
+  const cnt = document.getElementById('selCount');
+  if (!all) return;
+  function update() {
+    const checks = document.querySelectorAll('.row-check');
+    const sel = document.querySelectorAll('.row-check:checked').length;
+    bar.style.display = sel > 0 ? 'inline-flex' : 'none';
+    cnt.textContent = sel + ' selected';
+    all.checked = checks.length > 0 && sel === checks.length;
+    all.indeterminate = sel > 0 && sel < checks.length;
+  }
+  all.addEventListener('change', function() {
+    document.querySelectorAll('.row-check').forEach(c => c.checked = all.checked);
+    update();
+  });
+  document.addEventListener('change', function(e) { if (e.target.classList.contains('row-check')) update(); });
+})();
+</script>
 <script>
 // Range slider
 (function() {

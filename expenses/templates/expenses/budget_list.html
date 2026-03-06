@@ -6,22 +6,38 @@
   <a href="{% url 'budget_create' %}" class="btn btn-primary">+ Set Budget</a>
 </div>
 
+<form method="post" id="bulkBudgetForm">
+{% csrf_token %}
+
+<!-- BULK ACTION BAR -->
+<div id="budgetBulkBar" style="display:none;align-items:center;gap:.5rem;margin-bottom:1rem;padding:.6rem 1rem;background:var(--card-bg);border:1px solid var(--accent);border-radius:var(--radius);">
+  <span style="font-size:.82rem;font-weight:600;color:var(--accent);" id="budgetSelCount">0 selected</span>
+  <select name="bulk_action" style="width:auto;padding:.3rem .6rem;font-size:.78rem;margin:0;">
+    <option value="">— Bulk action —</option>
+    <option value="delete">🗑 Delete selected</option>
+  </select>
+  <button type="submit" class="btn btn-primary btn-sm" onclick="return confirm('Delete selected budgets?')">Apply</button>
+</div>
+
 <!-- OVERALL BUDGETS -->
 {% if overall_budget_data %}
 <div style="margin-bottom:1.5rem;">
   {% for od in overall_budget_data %}
   <div class="card" style="margin-bottom:1rem;border-left:4px solid var(--accent);">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.75rem;">
-      <div>
-        <div style="font-weight:800;font-size:1.1rem;">Overall — {{ od.budget.month_name }}</div>
-        {% if od.cat_sum and od.cat_sum != od.budget.amount %}
-        <div style="font-size:.75rem;color:var(--muted);">
-          Sum of category budgets: {{ od.cat_sum|inr }}
-          {% if od.budget.amount != od.cat_sum %}· <span style="color:var(--orange);">overridden</span>{% endif %}
+      <div style="display:flex;align-items:flex-start;gap:.5rem;">
+        <input type="checkbox" name="selected" value="{{ od.budget.pk }}" class="budget-check" style="width:auto;margin:.25rem 0 0 0;">
+        <div>
+          <div style="font-weight:800;font-size:1.1rem;">Overall — {{ od.budget.month_name }}</div>
+          {% if od.cat_sum and od.cat_sum != od.budget.amount %}
+          <div style="font-size:.75rem;color:var(--muted);">
+            Sum of category budgets: {{ od.cat_sum|inr }}
+            {% if od.budget.amount != od.cat_sum %}· <span style="color:var(--orange);">overridden</span>{% endif %}
+          </div>
+          {% elif od.cat_sum %}
+          <div style="font-size:.75rem;color:var(--muted);">Matches sum of category budgets</div>
+          {% endif %}
         </div>
-        {% elif od.cat_sum %}
-        <div style="font-size:.75rem;color:var(--muted);">Matches sum of category budgets</div>
-        {% endif %}
       </div>
       <div class="act-btns">
         <a href="{% url 'budget_edit' od.budget.pk %}" class="btn btn-outline btn-sm">Edit</a>
@@ -58,9 +74,12 @@
   {% for bd in cat_budget_data %}
   <div class="card" style="padding:1.25rem;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.85rem;">
-      <div>
-        <div style="font-weight:700;font-size:.95rem;">{{ bd.budget.category.name }}</div>
-        <div style="font-size:.78rem;color:var(--muted);">{{ bd.budget.month_name }}</div>
+      <div style="display:flex;align-items:flex-start;gap:.5rem;">
+        <input type="checkbox" name="selected" value="{{ bd.budget.pk }}" class="budget-check" style="width:auto;margin:.25rem 0 0 0;">
+        <div>
+          <div style="font-weight:700;font-size:.95rem;">{{ bd.budget.category.name }}</div>
+          <div style="font-size:.78rem;color:var(--muted);">{{ bd.budget.month_name }}</div>
+        </div>
       </div>
       <div class="act-btns">
         <a href="{% url 'budget_edit' bd.budget.pk %}" class="btn btn-outline btn-sm">Edit</a>
@@ -99,4 +118,20 @@
   </div>
 </div>
 {% endif %}
+
+</form>
+
+<script>
+(function(){
+  const bar = document.getElementById('budgetBulkBar');
+  const cnt = document.getElementById('budgetSelCount');
+  if (!bar) return;
+  function update() {
+    const sel = document.querySelectorAll('.budget-check:checked').length;
+    bar.style.display = sel > 0 ? 'flex' : 'none';
+    cnt.textContent = sel + ' selected';
+  }
+  document.addEventListener('change', function(e) { if (e.target.classList.contains('budget-check')) update(); });
+})();
+</script>
 {% endblock %}
