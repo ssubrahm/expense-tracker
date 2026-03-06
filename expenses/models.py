@@ -66,6 +66,14 @@ class Category(models.Model):
 
 
 class Expense(models.Model):
+    RECURRENCE_CHOICES = [
+        ("one_time", "One Time"),
+        ("monthly", "Monthly"),
+        ("quarterly", "Quarterly"),
+        ("half_yearly", "Half Yearly"),
+        ("annual", "Annual"),
+    ]
+
     PAYMENT_CHOICES = [
         ("cash", "Cash"),
         ("credit_card", "Credit Card"),
@@ -93,6 +101,12 @@ class Expense(models.Model):
         verbose_name="Spent by"
     )
     payment_method = models.CharField(max_length=20, choices=PAYMENT_CHOICES, default="cash")
+    recurrence = models.CharField(max_length=15, choices=RECURRENCE_CHOICES, default="one_time")
+    is_recurring_source = models.BooleanField(default=False, help_text="True if this is the original recurring expense")
+    recurring_parent = models.ForeignKey(
+        "self", on_delete=models.SET_NULL, null=True, blank=True, related_name="recurring_children",
+        help_text="Points to the original expense that spawned this recurrence"
+    )
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -101,6 +115,19 @@ class Expense(models.Model):
 
     def __str__(self):
         return f"{self.title} — ${self.amount}"
+
+    def next_occurrence_date(self, from_date):
+        """Calculate the next occurrence date from a given date."""
+        from dateutil.relativedelta import relativedelta
+        if self.recurrence == "monthly":
+            return from_date + relativedelta(months=1)
+        elif self.recurrence == "quarterly":
+            return from_date + relativedelta(months=3)
+        elif self.recurrence == "half_yearly":
+            return from_date + relativedelta(months=6)
+        elif self.recurrence == "annual":
+            return from_date + relativedelta(years=1)
+        return None
 
 
 class Budget(models.Model):

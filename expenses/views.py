@@ -14,6 +14,36 @@ from .models import Expense, Category, Budget, SavedFilter, FamilyMember
 from .forms import ExpenseForm, CategoryForm, BudgetForm, SavedFilterForm, ExpenseFilterForm, FamilyMemberForm
 
 
+def _generate_recurring_expenses():
+    """Generate any due recurring expenses. Safe to call multiple times."""
+    today = date.today()
+    recurring = Expense.objects.filter(
+        recurrence__in=["monthly", "quarterly", "half_yearly", "annual"],
+        recurring_parent__isnull=True,
+    )
+    for expense in recurring:
+        latest = expense.recurring_children.order_by("-date").first()
+        last_date = latest.date if latest else expense.date
+
+        next_date = expense.next_occurrence_date(last_date)
+        while next_date and next_date <= today:
+            if not Expense.objects.filter(recurring_parent=expense, date=next_date).exists():
+                Expense.objects.create(
+                    title=expense.title,
+                    amount=expense.amount,
+                    date=next_date,
+                    category=expense.category,
+                    spent_by=expense.spent_by,
+                    payment_method=expense.payment_method,
+                    recurrence=expense.recurrence,
+                    is_recurring_source=False,
+                    recurring_parent=expense,
+                    notes=expense.notes,
+                )
+            last_date = next_date
+            next_date = expense.next_occurrence_date(last_date)
+
+
 SORT_FIELDS = {
     "date": "-date", "-date": "date",
     "amount": "-amount", "-amount": "amount",
@@ -87,6 +117,7 @@ def apply_filters(request):
 
 
 def dashboard(request):
+    _generate_recurring_expenses()
     expenses = Expense.objects.select_related("category", "spent_by").all()
     today = date.today()
 
@@ -213,6 +244,7 @@ def dashboard(request):
 
 def spends(request):
     """Transactional expense listing with filters, sorting, and saved filters."""
+    _generate_recurring_expenses()
     saved_filters = SavedFilter.objects.all()
     if request.method == "POST":
         if "save_filter" in request.POST:
@@ -657,11 +689,12 @@ def export_csv(request):
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="expenses.csv"'
     writer = csv.writer(response)
-    writer.writerow(["Date", "Title", "Category", "Spent By", "Amount", "Payment Method", "Notes"])
+    writer.writerow(["Date", "Title", "Category", "Spent By", "Amount", "Payment Method", "Recurrence", "Notes"])
     for e in expenses:
         writer.writerow([e.date, e.title, e.category.name if e.category else "",
                          e.spent_by.name if e.spent_by else "",
-                         e.amount, e.get_payment_method_display(), e.notes])
+                         e.amount, e.get_payment_method_display(),
+                         e.get_recurrence_display(), e.notes])
     return response
 
 
@@ -669,9 +702,12 @@ def expense_create(request):
     if request.method == "POST":
         form = ExpenseForm(request.POST)
         if form.is_valid():
-            form.save()
+            expense = form.save(commit=False)
+            if expense.recurrence != "one_time":
+                expense.is_recurring_source = True
+            expense.save()
             messages.success(request, "Expense added.")
-            return redirect("dashboard")
+            return redirect("spends")
     else:
         form = ExpenseForm(initial={"date": date.today()})
     return render(request, "expenses/expense_form.html", {"form": form, "title": "Add Expense"})
@@ -682,9 +718,11 @@ def expense_edit(request, pk):
     if request.method == "POST":
         form = ExpenseForm(request.POST, instance=expense)
         if form.is_valid():
-            form.save()
+            exp = form.save(commit=False)
+            exp.is_recurring_source = (exp.recurrence != "one_time" and exp.recurring_parent is None)
+            exp.save()
             messages.success(request, "Expense updated.")
-            return redirect("dashboard")
+            return redirect("spends")
     else:
         form = ExpenseForm(instance=expense)
     return render(request, "expenses/expense_form.html", {"form": form, "title": "Edit Expense", "expense": expense})
