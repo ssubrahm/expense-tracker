@@ -997,7 +997,7 @@
     <span class="brand-icon">₹</span>
     <span><span class="brand-my">My</span><span class="brand-spend">Spend</span><span class="brand-tracker">Tracker</span></span>
   </div>
-  <span class="brand-tagline">PERSONAL FINANCE MANAGEMENT</span>
+  <span class="brand-tagline">FAMILY FINANCE MANAGEMENT</span>
 </div>
 
 <!-- MENU RIBBON -->
@@ -1026,6 +1026,10 @@
     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
     Categories
   </a>
+  <a href="{% url 'family_list' %}" class="nav-link desktop-link {% if 'family' in request.resolver_match.url_name %}active{% endif %}">
+    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+    Family
+  </a>
   <span class="nav-sep"></span>
   <div class="nav-right">
     <button class="theme-toggle" id="themeToggle" title="Toggle dark mode">
@@ -1046,11 +1050,11 @@
   <a href="{% url 'expense_create' %}" {% if request.resolver_match.url_name == 'expense_create' %}class="active"{% endif %}>
     <span class="mob-icon">➕</span>Add
   </a>
+  <a href="{% url 'family_list' %}" {% if 'family' in request.resolver_match.url_name %}class="active"{% endif %}>
+    <span class="mob-icon">👨‍👩‍👧‍👦</span>Family
+  </a>
   <a href="{% url 'reports' %}" {% if request.resolver_match.url_name == 'reports' %}class="active"{% endif %}>
     <span class="mob-icon">📋</span>Reports
-  </a>
-  <a href="{% url 'budget_list' %}" {% if 'budget' in request.resolver_match.url_name %}class="active"{% endif %}>
-    <span class="mob-icon">💰</span>Budgets
   </a>
 </div>
 

@@ -1,0 +1,114 @@
+{% extends "expenses/base.html" %}
+{% load expense_tags %}
+{% block content %}
+<div class="page-header">
+  <h1>Family Members</h1>
+  <a href="{% url 'family_create' %}" class="btn btn-primary">+ Add Member</a>
+</div>
+
+{% if member_data %}
+<!-- MEMBER CARDS -->
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem;margin-bottom:1.5rem;">
+  {% for md in member_data %}
+  <div class="card" style="position:relative;overflow:hidden;">
+    <div style="position:absolute;top:0;left:0;width:100%;height:4px;background:{{ md.member.avatar_color }};"></div>
+    <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;">
+      <div style="width:48px;height:48px;border-radius:50%;background:{{ md.member.avatar_color }};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:1.1rem;flex-shrink:0;">
+        {{ md.member.initials }}
+      </div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:700;font-size:1rem;">{{ md.member.name }}</div>
+        <div style="font-size:.78rem;color:var(--muted);display:flex;gap:.5rem;flex-wrap:wrap;">
+          <span class="pay-badge">{{ md.member.get_relationship_display }}</span>
+          {% if md.member.age %}<span>{{ md.member.age }} yrs</span>{% endif %}
+          {% if md.member.gender %}<span>· {{ md.member.get_gender_display }}</span>{% endif %}
+        </div>
+      </div>
+      <div class="act-btns" style="flex-shrink:0;">
+        <a href="{% url 'family_edit' md.member.pk %}" class="btn btn-outline btn-sm">Edit</a>
+        <a href="{% url 'family_delete' md.member.pk %}" class="btn btn-danger btn-sm">Del</a>
+      </div>
+    </div>
+    {% if md.member.email or md.member.phone %}
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:.75rem;display:flex;gap:1rem;flex-wrap:wrap;">
+      {% if md.member.email %}<span>✉️ {{ md.member.email }}</span>{% endif %}
+      {% if md.member.phone %}<span>📱 {{ md.member.phone }}</span>{% endif %}
+    </div>
+    {% endif %}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;">
+      <div>
+        <div style="font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Total Spent</div>
+        <div style="font-size:1.2rem;font-weight:800;color:var(--green);">{{ md.total|inr }}</div>
+      </div>
+      <div>
+        <div style="font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">This Month</div>
+        <div style="font-size:1.2rem;font-weight:800;">{{ md.this_month|inr }}</div>
+      </div>
+      <div>
+        <div style="font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Expenses</div>
+        <div style="font-weight:700;">{{ md.count }}</div>
+      </div>
+      <div>
+        <div style="font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Top Category</div>
+        <div><span class="cat-badge">{{ md.top_category }}</span></div>
+      </div>
+    </div>
+    <div style="margin-top:1rem;display:flex;gap:.35rem;">
+      <a href="{% url 'analytics' %}?member={{ md.member.pk }}" class="btn btn-outline btn-sm" style="flex:1;justify-content:center;">📊 Analytics</a>
+      <a href="{% url 'reports' %}?member={{ md.member.pk }}" class="btn btn-outline btn-sm" style="flex:1;justify-content:center;">📋 Reports</a>
+      <a href="{% url 'dashboard' %}?family_members={{ md.member.pk }}" class="btn btn-outline btn-sm" style="flex:1;justify-content:center;">📈 Expenses</a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- FAMILY COMPARISON TABLE -->
+<div class="table-card">
+  <div class="table-toolbar">
+    <h2>Family Spending Comparison</h2>
+    <span class="table-meta">{{ member_data|length }} member{{ member_data|length|pluralize }}</span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Member</th>
+        <th>Relationship</th>
+        <th>Expenses</th>
+        <th>Total Spent</th>
+        <th>This Month</th>
+        <th>Top Category</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for md in member_data %}
+      <tr>
+        <td>
+          <div style="display:flex;align-items:center;gap:.5rem;">
+            <div style="width:28px;height:28px;border-radius:50%;background:{{ md.member.avatar_color }};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.7rem;flex-shrink:0;">
+              {{ md.member.initials }}
+            </div>
+            <strong>{{ md.member.name }}</strong>
+          </div>
+        </td>
+        <td><span class="pay-badge">{{ md.member.get_relationship_display }}</span></td>
+        <td style="color:var(--muted);">{{ md.count }}</td>
+        <td class="amount-cell">{{ md.total|inr }}</td>
+        <td style="font-weight:600;">{{ md.this_month|inr }}</td>
+        <td><span class="cat-badge">{{ md.top_category }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% else %}
+<div class="card">
+  <div class="empty-state">
+    <div class="empty-illustration">👨‍👩‍👧‍👦</div>
+    <h3>No family members yet</h3>
+    <p>Add family members to track who's spending what. Start with yourself, then add your spouse, kids, parents, etc.</p>
+    <a href="{% url 'family_create' %}" class="btn btn-primary">Add your first family member</a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

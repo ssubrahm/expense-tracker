@@ -3,14 +3,30 @@
 {% block content %}
 
 <div class="page-header">
-  <h1>Reports</h1>
-  <div class="page-actions">
-    <a href="?period=monthly" class="btn {% if period == 'monthly' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">Monthly</a>
-    <a href="?period=quarterly" class="btn {% if period == 'quarterly' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">Quarterly</a>
-    <a href="?period=half_yearly" class="btn {% if period == 'half_yearly' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">Half Yearly</a>
-    <a href="?period=annual" class="btn {% if period == 'annual' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">Annual</a>
+  <h1>Reports{% if selected_member %} — {{ selected_member.name }}{% endif %}</h1>
+  <div class="page-actions" style="display:flex;gap:.35rem;flex-wrap:wrap;">
+    <a href="?period={{ period }}" class="btn {% if period == 'monthly' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">Monthly</a>
+    <a href="?period=quarterly{% if selected_member %}&member={{ selected_member.pk }}{% endif %}" class="btn {% if period == 'quarterly' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">Quarterly</a>
+    <a href="?period=half_yearly{% if selected_member %}&member={{ selected_member.pk }}{% endif %}" class="btn {% if period == 'half_yearly' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">Half Yearly</a>
+    <a href="?period=annual{% if selected_member %}&member={{ selected_member.pk }}{% endif %}" class="btn {% if period == 'annual' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">Annual</a>
   </div>
 </div>
+
+<!-- FAMILY MEMBER SELECTOR -->
+{% if family_members %}
+<div class="card" style="margin-bottom:1rem;padding:.75rem 1.25rem;">
+  <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
+    <span style="font-size:.78rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">View for:</span>
+    <a href="?period={{ period }}" class="btn {% if not selected_member %}btn-primary{% else %}btn-outline{% endif %} btn-sm">All Family</a>
+    {% for fm in family_members %}
+    <a href="?period={{ period }}&member={{ fm.pk }}" class="btn {% if selected_member.pk == fm.pk %}btn-primary{% else %}btn-outline{% endif %} btn-sm" style="display:inline-flex;align-items:center;gap:.3rem;">
+      <span style="width:16px;height:16px;border-radius:50%;background:{{ fm.avatar_color }};display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:.5rem;font-weight:700;">{{ fm.initials }}</span>
+      {{ fm.name }}
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
 
 <!-- REPORT HEADER -->
 <div class="card" style="margin-bottom:1.5rem;">
@@ -176,6 +192,56 @@
 </div>
 {% endif %}
 
+<!-- FAMILY MEMBER BREAKDOWN -->
+{% if member_breakdown and not selected_member %}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
+  <div class="chart-card">
+    <div class="chart-title">Spending by Family Member — {{ period_label }}</div>
+    <canvas id="memberPieChart"></canvas>
+  </div>
+  <div class="table-card" style="margin-bottom:0;">
+    <div class="table-toolbar">
+      <h2>Family Member Comparison</h2>
+    </div>
+    <table>
+      <thead><tr><th>Member</th><th>Spent</th><th>% of Total</th><th>Expenses</th><th>vs Prev</th><th>Top Category</th></tr></thead>
+      <tbody>
+        {% for mb in member_breakdown %}
+        <tr>
+          <td>
+            <div style="display:flex;align-items:center;gap:.4rem;">
+              <div style="width:22px;height:22px;border-radius:50%;background:{{ mb.member.avatar_color }};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.6rem;flex-shrink:0;">{{ mb.member.initials }}</div>
+              <a href="?period={{ period }}&member={{ mb.member.pk }}" style="font-weight:600;color:var(--text);text-decoration:none;">{{ mb.member.name }}</a>
+            </div>
+          </td>
+          <td class="amount-cell">{{ mb.spent|inr }}</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:.4rem;">
+              <div class="budget-bar-track" style="width:60px;margin:0;">
+                <div class="budget-bar-fill" style="width:{{ mb.pct_of_total }}%;background:{{ mb.member.avatar_color }};"></div>
+              </div>
+              <span style="font-size:.78rem;font-weight:600;">{{ mb.pct_of_total }}%</span>
+            </div>
+          </td>
+          <td style="color:var(--muted);">{{ mb.count }}</td>
+          <td>
+            {% if mb.change > 0 %}
+            <span style="color:var(--red);font-size:.82rem;">▲ {{ mb.change }}%</span>
+            {% elif mb.change < 0 %}
+            <span style="color:var(--green);font-size:.82rem;">▼ {{ mb.change }}%</span>
+            {% else %}
+            <span style="color:var(--muted);font-size:.82rem;">—</span>
+            {% endif %}
+          </td>
+          <td><span class="cat-badge">{{ mb.top_category }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 <!-- ===== ASSESSMENT SECTION ===== -->
 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
 
@@ -231,6 +297,8 @@
 const catLabels = {{ chart_labels|safe }};
 const catSpent = {{ chart_spent|safe }};
 const catBudget = {{ chart_budget|safe }};
+const rmLabels = {{ report_member_labels|safe }};
+const rmData = {{ report_member_data|safe }};
 const cTheme = function() {
   const d = document.documentElement.getAttribute('data-theme') === 'dark';
   return { grid: d ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.06)', text: d ? '#94a3b8' : '#64748b' };
@@ -273,6 +341,26 @@ new Chart(document.getElementById('catBudgetChart'), {
     }
   }
 });
+
+// Family member pie chart
+if (rmLabels.length > 0 && document.getElementById('memberPieChart')) {
+  const COLORS = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#ec4899','#f97316','#14b8a6','#6366f1'];
+  new Chart(document.getElementById('memberPieChart'), {
+    type: 'doughnut',
+    data: {
+      labels: rmLabels,
+      datasets: [{ data: rmData, backgroundColor: COLORS.slice(0, rmLabels.length), borderWidth: 2, borderColor: getComputedStyle(document.documentElement).getPropertyValue('--card').trim() || '#fff' }]
+    },
+    options: {
+      responsive: true,
+      cutout: '50%',
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12, padding: 12, color: cTheme().text } },
+        tooltip: { callbacks: { label: ctx => ` ₹${ctx.parsed.toLocaleString('en-IN', {minimumFractionDigits: 2})}` } }
+      }
+    }
+  });
+}
 </script>
 {% endif %}
 

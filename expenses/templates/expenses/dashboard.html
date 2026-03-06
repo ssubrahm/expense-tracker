@@ -89,6 +89,38 @@
   </div>
 </div>
 
+<!-- FAMILY SPENDING CHART -->
+{% if by_member and by_member|length > 0 %}
+<div class="charts-row2" style="margin-bottom:1.5rem;">
+  <div class="chart-card">
+    <div class="chart-title">Spending by Family Member</div>
+    <canvas id="memberChart"></canvas>
+  </div>
+  <div class="card">
+    <div class="card-title">By Family Member</div>
+    <table>
+      <thead><tr><th>Member</th><th>Count</th><th>Total</th></tr></thead>
+      <tbody>
+        {% for r in by_member %}
+        <tr>
+          <td>
+            <div style="display:flex;align-items:center;gap:.4rem;">
+              {% if r.spent_by__avatar_color %}
+              <div style="width:22px;height:22px;border-radius:50%;background:{{ r.spent_by__avatar_color }};flex-shrink:0;"></div>
+              {% endif %}
+              <strong>{{ r.spent_by__name|default:"Unassigned" }}</strong>
+            </div>
+          </td>
+          <td style="color:var(--muted)">{{ r.count }}</td>
+          <td class="amount-cell">{{ r.total|inr }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 <!-- FILTER PANEL -->
 <div class="filter-panel">
   <div class="filter-toggle">
@@ -97,7 +129,7 @@
   </div>
   <div class="filter-body">
     <form method="get" id="filterForm">
-      <div class="filter-grid">
+      <div class="filter-grid" style="grid-template-columns:2fr 1.5fr 1fr 1fr 1fr;">
         <div class="filter-col">
           <label class="col-title">Search</label>
           <input type="text" name="search" value="{{ filter_form.search.value|default:'' }}" placeholder="Search title or notes…">
@@ -153,6 +185,14 @@
             {% endfor %}
           </div>
         </div>
+        <div class="filter-col">
+          <label class="col-title">Family Member</label>
+          <div class="check-list">
+            {% for fm in filter_form.family_members %}
+            <label>{{ fm.tag }} {{ fm.choice_label }}</label>
+            {% endfor %}
+          </div>
+        </div>
       </div>
       <div style="display:flex;gap:.5rem;margin-top:1.25rem;align-items:center;flex-wrap:wrap;">
         <button type="submit" class="btn btn-primary">Apply Filters</button>
@@ -199,6 +239,7 @@
         <th><a href="?{% url_replace 'sort' '-date' %}">Date {% if sort == '-date' %}↓{% elif sort == 'date' %}↑{% else %}<span style="opacity:.4">↕</span>{% endif %}</a></th>
         <th><a href="?{% url_replace 'sort' 'title' %}">Title {% if sort == 'title' %}↑{% elif sort == '-title' %}↓{% else %}<span style="opacity:.4">↕</span>{% endif %}</a></th>
         <th><a href="?{% url_replace 'sort' 'category' %}">Category {% if sort == 'category' %}↑{% elif sort == '-category' %}↓{% else %}<span style="opacity:.4">↕</span>{% endif %}</a></th>
+        <th>Spent By</th>
         <th><a href="?{% url_replace 'sort' '-amount' %}">Amount {% if sort == '-amount' %}↓{% elif sort == 'amount' %}↑{% else %}<span style="opacity:.4">↕</span>{% endif %}</a></th>
         <th>Payment</th>
         <th>Notes</th>
@@ -219,6 +260,14 @@
             {% endwith %}
             {{ e.category.name|default:"—" }}
           </span>
+        </td>
+        <td>
+          {% if e.spent_by %}
+          <div style="display:flex;align-items:center;gap:.3rem;">
+            <div style="width:20px;height:20px;border-radius:50%;background:{{ e.spent_by.avatar_color }};display:flex;align-items:center;justify-content:center;color:#fff;font-size:.55rem;font-weight:700;flex-shrink:0;">{{ e.spent_by.initials }}</div>
+            <span style="font-size:.82rem;">{{ e.spent_by.name }}</span>
+          </div>
+          {% else %}<span style="color:var(--muted);">—</span>{% endif %}
         </td>
         <td class="amount-cell">{{ e.amount|inr }}</td>
         <td><span class="pay-badge">{{ e.get_payment_method_display }}</span></td>
@@ -285,6 +334,8 @@ const monthlyData   = {{ monthly_data|safe }};
 const stackedDS     = {{ stacked_datasets|safe }};
 const catLabels     = {{ cat_labels|safe }};
 const catData       = {{ cat_data|safe }};
+const memberLabels  = {{ member_labels|safe }};
+const memberData    = {{ member_data|safe }};
 const chartTheme = function() {
   const dark = document.documentElement.getAttribute('data-theme') === 'dark';
   return { grid: dark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.06)', text: dark ? '#94a3b8' : '#64748b' };
@@ -346,6 +397,30 @@ new Chart(document.getElementById('categoryChart').getContext('2d'), {
     }
   }
 });
+
+// Member doughnut chart
+if (memberLabels.length > 0 && document.getElementById('memberChart')) {
+  new Chart(document.getElementById('memberChart').getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      labels: memberLabels,
+      datasets: [{
+        data: memberData,
+        backgroundColor: COLORS.slice(0, memberLabels.length),
+        borderWidth: 2,
+        borderColor: getComputedStyle(document.documentElement).getPropertyValue('--card').trim() || '#fff'
+      }]
+    },
+    options: {
+      responsive: true,
+      cutout: '55%',
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12, padding: 12, color: chartTheme().text } },
+        tooltip: { callbacks: { label: ctx => ` ₹${ctx.parsed.toLocaleString('en-IN', {minimumFractionDigits: 2})}` } }
+      }
+    }
+  });
+}
 
 // Range slider
 (function() {

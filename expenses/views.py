@@ -10,8 +10,8 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 
-from .models import Expense, Category, Budget, SavedFilter
-from .forms import ExpenseForm, CategoryForm, BudgetForm, SavedFilterForm, ExpenseFilterForm
+from .models import Expense, Category, Budget, SavedFilter, FamilyMember
+from .forms import ExpenseForm, CategoryForm, BudgetForm, SavedFilterForm, ExpenseFilterForm, FamilyMemberForm
 
 
 SORT_FIELDS = {
@@ -35,13 +35,14 @@ def get_category_color_map():
 
 
 def apply_filters(request):
-    expenses = Expense.objects.select_related("category").all()
+    expenses = Expense.objects.select_related("category", "spent_by").all()
     filter_form = ExpenseFilterForm(request.GET)
 
     if filter_form.is_valid():
         search = filter_form.cleaned_data.get("search")
         categories = filter_form.cleaned_data.get("categories")
         payment_methods = filter_form.cleaned_data.get("payment_method")
+        family_members = filter_form.cleaned_data.get("family_members")
         date_preset = filter_form.cleaned_data.get("date_preset")
         date_from = filter_form.cleaned_data.get("date_from")
         date_to = filter_form.cleaned_data.get("date_to")
@@ -52,6 +53,8 @@ def apply_filters(request):
             expenses = expenses.filter(Q(title__icontains=search) | Q(notes__icontains=search))
         if categories:
             expenses = expenses.filter(category__in=categories)
+        if family_members:
+            expenses = expenses.filter(spent_by__in=family_members)
         if payment_methods:
             expenses = expenses.filter(payment_method__in=payment_methods)
         if amount_min is not None:
@@ -199,6 +202,15 @@ def dashboard(request):
 
     cat_color_map = get_category_color_map()
 
+    # Family member spending breakdown
+    by_member = (
+        expenses.values("spent_by__name", "spent_by__avatar_color", "spent_by__id")
+        .annotate(total=Sum("amount"), count=Count("id"))
+        .order_by("-total")
+    )
+    member_labels = [r["spent_by__name"] or "Unassigned" for r in by_member]
+    member_data = [float(r["total"]) for r in by_member]
+
     context = {
         "expenses": expenses,
         "filter_form": filter_form,
@@ -212,11 +224,14 @@ def dashboard(request):
         "count": count,
         "by_category": by_category,
         "by_payment": by_payment,
+        "by_member": by_member,
         "monthly_labels": json.dumps(monthly_labels),
         "monthly_data": json.dumps(monthly_data),
         "stacked_datasets": json.dumps(stacked_datasets),
         "cat_labels": json.dumps(cat_labels),
         "cat_data": json.dumps(cat_data),
+        "member_labels": json.dumps(member_labels),
+        "member_data": json.dumps(member_data),
         "amount_global_min": amount_global_min,
         "amount_global_max": amount_global_max,
         "current_qs": request.GET.urlencode(),
@@ -233,7 +248,17 @@ def dashboard(request):
 
 def analytics(request):
     today = date.today()
-    all_expenses = Expense.objects.select_related("category").all()
+    all_expenses = Expense.objects.select_related("category", "spent_by").all()
+
+    # Family member filter
+    member_id = request.GET.get("member")
+    selected_member = None
+    if member_id:
+        try:
+            selected_member = FamilyMember.objects.get(pk=member_id)
+            all_expenses = all_expenses.filter(spent_by=selected_member)
+        except FamilyMember.DoesNotExist:
+            pass
 
     # --- Monthly trend (12 months) ---
     monthly_qs = (
@@ -410,6 +435,33 @@ def analytics(request):
 
     cat_color_map = get_category_color_map()
 
+    # Family member spending comparison (all-time, unfiltered by member)
+    base_expenses = Expense.objects.select_related("spent_by").all()
+    family_members = FamilyMember.objects.filter(is_active=True)
+    member_spending = []
+    for fm in family_members:
+        fm_total = base_expenses.filter(spent_by=fm).aggregate(t=Sum("amount"))["t"] or Decimal("0")
+        fm_count = base_expenses.filter(spent_by=fm).count()
+        fm_this_month = base_expenses.filter(
+            spent_by=fm, date__year=today.year, date__month=today.month
+        ).aggregate(t=Sum("amount"))["t"] or Decimal("0")
+        fm_top_cat = (
+            base_expenses.filter(spent_by=fm)
+            .values("category__name").annotate(t=Sum("amount")).order_by("-t").first()
+        )
+        member_spending.append({
+            "member": fm,
+            "total": fm_total,
+            "count": fm_count,
+            "this_month": fm_this_month,
+            "top_category": fm_top_cat["category__name"] if fm_top_cat else "—",
+        })
+    member_spending.sort(key=lambda x: x["total"], reverse=True)
+
+    member_chart_labels = [ms["member"].name for ms in member_spending]
+    member_chart_data = [float(ms["total"]) for ms in member_spending]
+    member_month_data = [float(ms["this_month"]) for ms in member_spending]
+
     context = {
         "monthly_labels": json.dumps(monthly_labels),
         "monthly_totals": json.dumps(monthly_totals),
@@ -425,6 +477,12 @@ def analytics(request):
         "overall": overall,
         "today": today,
         "cat_color_map": cat_color_map,
+        "family_members": family_members,
+        "selected_member": selected_member,
+        "member_spending": member_spending,
+        "member_chart_labels": json.dumps(member_chart_labels),
+        "member_chart_data": json.dumps(member_chart_data),
+        "member_month_data": json.dumps(member_month_data),
     }
     return render(request, "expenses/analytics.html", context)
 
@@ -517,9 +575,10 @@ def export_csv(request):
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="expenses.csv"'
     writer = csv.writer(response)
-    writer.writerow(["Date", "Title", "Category", "Amount", "Payment Method", "Notes"])
+    writer.writerow(["Date", "Title", "Category", "Spent By", "Amount", "Payment Method", "Notes"])
     for e in expenses:
         writer.writerow([e.date, e.title, e.category.name if e.category else "",
+                         e.spent_by.name if e.spent_by else "",
                          e.amount, e.get_payment_method_display(), e.notes])
     return response
 
@@ -562,6 +621,8 @@ def reports(request):
     """Spending reports: monthly, quarterly, half-yearly, annual with budget comparison."""
     today = date.today()
     period = request.GET.get("period", "monthly")
+    member_id = request.GET.get("member")
+    selected_member = None
 
     # Build period ranges
     if period == "quarterly":
@@ -599,6 +660,15 @@ def reports(request):
     # Current period expenses
     expenses = Expense.objects.filter(date__gte=period_start, date__lte=period_end)
     prev_expenses = Expense.objects.filter(date__gte=prev_start, date__lte=prev_end)
+
+    # Family member filter
+    if member_id:
+        try:
+            selected_member = FamilyMember.objects.get(pk=member_id)
+            expenses = expenses.filter(spent_by=selected_member)
+            prev_expenses = prev_expenses.filter(spent_by=selected_member)
+        except FamilyMember.DoesNotExist:
+            pass
 
     # Summary stats
     agg = expenses.aggregate(
@@ -750,6 +820,34 @@ def reports(request):
     chart_spent = [float(cb["spent"]) for cb in cat_breakdown[:8]]
     chart_budget = [float(cb["budget"]) if cb["budget"] else 0 for cb in cat_breakdown[:8]]
 
+    # Family member breakdown for this period
+    family_members = FamilyMember.objects.filter(is_active=True)
+    all_period_expenses = Expense.objects.filter(date__gte=period_start, date__lte=period_end)
+    all_prev_expenses = Expense.objects.filter(date__gte=prev_start, date__lte=prev_end)
+    member_breakdown = []
+    for fm in family_members:
+        fm_spent = all_period_expenses.filter(spent_by=fm).aggregate(t=Sum("amount"))["t"] or Decimal("0")
+        fm_prev = all_prev_expenses.filter(spent_by=fm).aggregate(t=Sum("amount"))["t"] or Decimal("0")
+        fm_count = all_period_expenses.filter(spent_by=fm).count()
+        fm_change = 0
+        if fm_prev > 0:
+            fm_change = round(float(fm_spent - fm_prev) / float(fm_prev) * 100, 1)
+        fm_top = all_period_expenses.filter(spent_by=fm).values("category__name").annotate(
+            t=Sum("amount")).order_by("-t").first()
+        member_breakdown.append({
+            "member": fm,
+            "spent": fm_spent,
+            "prev": fm_prev,
+            "count": fm_count,
+            "change": fm_change,
+            "top_category": fm_top["category__name"] if fm_top else "—",
+            "pct_of_total": round(float(fm_spent) / float(total) * 100, 1) if total else 0,
+        })
+    member_breakdown.sort(key=lambda x: x["spent"], reverse=True)
+
+    report_member_labels = [mb["member"].name for mb in member_breakdown]
+    report_member_data = [float(mb["spent"]) for mb in member_breakdown]
+
     context = {
         "period": period,
         "period_label": period_label,
@@ -772,6 +870,11 @@ def reports(request):
         "chart_spent": json.dumps(chart_spent),
         "chart_budget": json.dumps(chart_budget),
         "today": today,
+        "family_members": family_members,
+        "selected_member": selected_member,
+        "member_breakdown": member_breakdown,
+        "report_member_labels": json.dumps(report_member_labels),
+        "report_member_data": json.dumps(report_member_data),
     }
     return render(request, "expenses/reports.html", context)
 
@@ -805,3 +908,68 @@ def category_delete(request, pk):
         messages.success(request, "Category deleted.")
         return redirect("category_list")
     return render(request, "expenses/category_confirm_delete.html", {"category": category})
+
+
+# ── Family Member CRUD ──────────────────────────────────────────
+
+def family_list(request):
+    members = FamilyMember.objects.filter(is_active=True).annotate(
+        total=Sum("expenses__amount"),
+        count=Count("expenses"),
+    ).order_by("name")
+    today = date.today()
+    member_data = []
+    for m in members:
+        this_month = Expense.objects.filter(
+            spent_by=m, date__year=today.year, date__month=today.month
+        ).aggregate(t=Sum("amount"))["t"] or Decimal("0")
+        top_cat = (
+            Expense.objects.filter(spent_by=m)
+            .values("category__name").annotate(t=Sum("amount")).order_by("-t").first()
+        )
+        member_data.append({
+            "member": m,
+            "total": m.total or Decimal("0"),
+            "count": m.count or 0,
+            "this_month": this_month,
+            "top_category": top_cat["category__name"] if top_cat else "—",
+        })
+    return render(request, "expenses/family_list.html", {
+        "member_data": member_data,
+        "chart_colors": json.dumps(CHART_COLORS),
+    })
+
+
+def family_create(request):
+    if request.method == "POST":
+        form = FamilyMemberForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f"Family member '{form.cleaned_data['name']}' added.")
+            return redirect("family_list")
+    else:
+        form = FamilyMemberForm()
+    return render(request, "expenses/family_form.html", {"form": form, "title": "Add Family Member"})
+
+
+def family_edit(request, pk):
+    member = get_object_or_404(FamilyMember, pk=pk)
+    if request.method == "POST":
+        form = FamilyMemberForm(request.POST, instance=member)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f"'{member.name}' updated.")
+            return redirect("family_list")
+    else:
+        form = FamilyMemberForm(instance=member)
+    return render(request, "expenses/family_form.html", {"form": form, "title": f"Edit {member.name}", "member": member})
+
+
+def family_delete(request, pk):
+    member = get_object_or_404(FamilyMember, pk=pk)
+    if request.method == "POST":
+        member.is_active = False
+        member.save()
+        messages.success(request, f"'{member.name}' deactivated.")
+        return redirect("family_list")
+    return render(request, "expenses/family_confirm_delete.html", {"member": member})

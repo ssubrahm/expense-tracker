@@ -1,11 +1,21 @@
 from django import forms
-from .models import Expense, Category, Budget, SavedFilter
+from .models import Expense, Category, Budget, SavedFilter, FamilyMember
+
+
+class FamilyMemberForm(forms.ModelForm):
+    class Meta:
+        model = FamilyMember
+        fields = ["name", "email", "phone", "relationship", "gender", "date_of_birth", "avatar_color"]
+        widgets = {
+            "date_of_birth": forms.DateInput(attrs={"type": "date"}),
+            "avatar_color": forms.TextInput(attrs={"type": "color", "style": "width:50px;height:36px;padding:2px;"}),
+        }
 
 
 class ExpenseForm(forms.ModelForm):
     class Meta:
         model = Expense
-        fields = ["title", "amount", "date", "category", "payment_method", "notes"]
+        fields = ["title", "amount", "date", "category", "spent_by", "payment_method", "notes"]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
             "notes": forms.Textarea(attrs={"rows": 3}),
@@ -48,6 +58,11 @@ class ExpenseFilterForm(forms.Form):
     search = forms.CharField(
         required=False, max_length=200,
         widget=forms.TextInput(attrs={"placeholder": "Search title or notes…"})
+    )
+    family_members = forms.ModelMultipleChoiceField(
+        queryset=FamilyMember.objects.filter(is_active=True),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
     )
     categories = forms.ModelMultipleChoiceField(
         queryset=Category.objects.all(),

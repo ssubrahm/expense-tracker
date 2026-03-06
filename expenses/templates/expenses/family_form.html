@@ -1,0 +1,32 @@
+{% extends "expenses/base.html" %}
+{% block content %}
+<div class="form-card">
+  <h1>{{ title }}</h1>
+  <form method="post" id="mainForm">
+    {% csrf_token %}
+    {% for field in form %}
+      <div>
+        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+        {% if field.help_text %}
+          <small class="form-hint">{{ field.help_text }}</small>
+        {% endif %}
+        {% if field.errors %}
+          <small class="form-error">{{ field.errors|join:", " }}</small>
+        {% endif %}
+      </div>
+    {% endfor %}
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Save</button>
+      <a href="{% url 'family_list' %}" class="btn btn-secondary">Cancel</a>
+      <span class="kbd-hint"><kbd>Ctrl</kbd>+<kbd>Enter</kbd> to save</span>
+    </div>
+  </form>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var first = document.querySelector('.form-card input[type=text]');
+  if (first) first.focus();
+});
+</script>
+{% endblock %}

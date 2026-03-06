@@ -4,6 +4,56 @@ from decimal import Decimal
 import datetime
 
 
+class FamilyMember(models.Model):
+    RELATIONSHIP_CHOICES = [
+        ("self", "Self"),
+        ("spouse", "Spouse"),
+        ("child", "Child"),
+        ("parent", "Parent"),
+        ("sibling", "Sibling"),
+        ("grandparent", "Grandparent"),
+        ("other", "Other"),
+    ]
+    GENDER_CHOICES = [
+        ("male", "Male"),
+        ("female", "Female"),
+        ("other", "Other"),
+    ]
+
+    name = models.CharField(max_length=150)
+    email = models.EmailField(blank=True)
+    phone = models.CharField(max_length=20, blank=True)
+    relationship = models.CharField(max_length=20, choices=RELATIONSHIP_CHOICES, default="self")
+    gender = models.CharField(max_length=10, choices=GENDER_CHOICES, blank=True)
+    date_of_birth = models.DateField(null=True, blank=True)
+    avatar_color = models.CharField(max_length=7, default="#6366f1", help_text="Hex colour for avatar")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def initials(self):
+        parts = self.name.strip().split()
+        if len(parts) >= 2:
+            return (parts[0][0] + parts[-1][0]).upper()
+        return self.name[:2].upper()
+
+    @property
+    def age(self):
+        if not self.date_of_birth:
+            return None
+        import datetime as dt
+        today = dt.date.today()
+        return today.year - self.date_of_birth.year - (
+            (today.month, today.day) < (self.date_of_birth.month, self.date_of_birth.day)
+        )
+
+
 class Category(models.Model):
     name = models.CharField(max_length=100, unique=True)
 
@@ -37,6 +87,10 @@ class Expense(models.Model):
     date = models.DateField()
     category = models.ForeignKey(
         Category, on_delete=models.SET_NULL, null=True, blank=True, related_name="expenses"
+    )
+    spent_by = models.ForeignKey(
+        FamilyMember, on_delete=models.SET_NULL, null=True, blank=True, related_name="expenses",
+        verbose_name="Spent by"
     )
     payment_method = models.CharField(max_length=20, choices=PAYMENT_CHOICES, default="cash")
     notes = models.TextField(blank=True)

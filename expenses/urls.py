@@ -16,4 +16,8 @@ urlpatterns = [
     path("categories/", views.category_list, name="category_list"),
     path("categories/add/", views.category_create, name="category_create"),
     path("categories/<int:pk>/delete/", views.category_delete, name="category_delete"),
+    path("family/", views.family_list, name="family_list"),
+    path("family/add/", views.family_create, name="family_create"),
+    path("family/<int:pk>/edit/", views.family_edit, name="family_edit"),
+    path("family/<int:pk>/delete/", views.family_delete, name="family_delete"),
 ]
