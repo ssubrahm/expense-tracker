@@ -1041,7 +1041,10 @@
     <a href="{% url 'profile' %}" class="nav-link desktop-link" style="font-size:.78rem;margin-left:.5rem;" title="Profile">
       👤 {{ user.first_name|default:user.username }}
     </a>
-    <a href="{% url 'logout' %}" class="nav-link desktop-link" style="font-size:.78rem;color:var(--muted);" title="Logout">Logout</a>
+    <form method="post" action="{% url 'logout' %}" style="display:inline;margin:0;">
+      {% csrf_token %}
+      <button type="submit" class="nav-link desktop-link" style="font-size:.78rem;color:var(--muted);background:none;border:none;cursor:pointer;padding:0;" title="Logout">Logout</button>
+    </form>
     {% endif %}
   </div>
 </nav>
