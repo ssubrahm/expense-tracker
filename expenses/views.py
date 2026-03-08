@@ -326,6 +326,12 @@ def spends(request):
             action = request.POST.get("bulk_action")
             if selected:
                 qs = Expense.objects.filter(pk__in=selected)
+                if not _is_admin(request):
+                    member = _get_member(request)
+                    qs = qs.filter(spent_by=member)
+                    if not qs.exists():
+                        messages.error(request, "You can only modify your own expenses.")
+                        return redirect("spends")
                 if action == "delete":
                     count_del = qs.count()
                     qs.delete()
@@ -716,6 +722,9 @@ def analytics(request):
 @login_required
 def budget_list(request):
     if request.method == "POST" and "bulk_action" in request.POST:
+        if not _is_admin(request):
+            messages.error(request, "Only the family admin can manage budgets.")
+            return redirect("budget_list")
         selected = request.POST.getlist("selected")
         action = request.POST.get("bulk_action")
         if selected and action == "delete":
@@ -792,6 +801,9 @@ def budget_list(request):
 
 @login_required
 def budget_create(request):
+    if not _is_admin(request):
+        messages.error(request, "Only the family admin can create budgets.")
+        return redirect("budget_list")
     if request.method == "POST":
         form = BudgetForm(request.POST)
         if form.is_valid():
@@ -806,6 +818,9 @@ def budget_create(request):
 
 @login_required
 def budget_edit(request, pk):
+    if not _is_admin(request):
+        messages.error(request, "Only the family admin can edit budgets.")
+        return redirect("budget_list")
     budget = get_object_or_404(Budget, pk=pk)
     if request.method == "POST":
         form = BudgetForm(request.POST, instance=budget)
@@ -823,6 +838,9 @@ def budget_edit(request, pk):
 
 @login_required
 def budget_delete(request, pk):
+    if not _is_admin(request):
+        messages.error(request, "Only the family admin can delete budgets.")
+        return redirect("budget_list")
     budget = get_object_or_404(Budget, pk=pk)
     if request.method == "POST":
         budget.delete()
@@ -892,19 +910,22 @@ def export_csv(request):
 @login_required
 def expense_create(request):
     member = _get_member(request)
+    is_admin = _is_admin(request)
     if request.method == "POST":
         form = ExpenseForm(request.POST)
         if form.is_valid():
             expense = form.save(commit=False)
             if expense.recurrence != "one_time":
                 expense.is_recurring_source = True
-            if not expense.spent_by and member:
+            if not is_admin or not expense.spent_by:
                 expense.spent_by = member
             expense.save()
             messages.success(request, "Expense added.")
             return redirect("spends")
     else:
         form = ExpenseForm(initial={"date": date.today(), "spent_by": member})
+    if not is_admin:
+        form.fields["spent_by"].disabled = True
     return render(request, "expenses/expense_form.html", {"form": form, "title": "Add Expense"})
 
 
@@ -924,6 +945,8 @@ def expense_edit(request, pk):
             return redirect("spends")
     else:
         form = ExpenseForm(instance=expense)
+    if not _is_admin(request):
+        form.fields["spent_by"].disabled = True
     return render(request, "expenses/expense_form.html", {"form": form, "title": "Edit Expense", "expense": expense})
 
 
@@ -983,6 +1006,9 @@ def category_list(request):
 
 @login_required
 def category_create(request):
+    if not _is_admin(request):
+        messages.error(request, "Only the family admin can add categories.")
+        return redirect("category_list")
     if request.method == "POST":
         form = CategoryForm(request.POST)
         if form.is_valid():
@@ -996,6 +1022,9 @@ def category_create(request):
 
 @login_required
 def category_delete(request, pk):
+    if not _is_admin(request):
+        messages.error(request, "Only the family admin can delete categories.")
+        return redirect("category_list")
     category = get_object_or_404(Category, pk=pk)
     if request.method == "POST":
         category.delete()

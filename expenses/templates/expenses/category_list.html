@@ -3,14 +3,16 @@
 {% block content %}
 <div class="page-header">
   <h1>Categories</h1>
+  {% if is_family_admin %}
   <a href="{% url 'category_create' %}" class="btn btn-primary">+ Add Category</a>
+  {% endif %}
 </div>
 
 {% if categories %}
 <div class="table-card">
   <table>
     <thead>
-      <tr><th>Category</th><th>Expenses</th><th>Total Spent</th><th>Actions</th></tr>
+      <tr><th>Category</th><th>Expenses</th><th>Total Spent</th>{% if is_family_admin %}<th>Actions</th>{% endif %}</tr>
     </thead>
     <tbody>
       {% for cat in categories %}
@@ -25,9 +27,11 @@
         </td>
         <td style="color:var(--muted)">{{ cat.count }}</td>
         <td class="amount-cell">{% if cat.total %}{{ cat.total|inr }}{% else %}—{% endif %}</td>
+        {% if is_family_admin %}
         <td>
           <a href="{% url 'category_delete' cat.pk %}" class="btn btn-danger btn-sm">Delete</a>
         </td>
+        {% endif %}
       </tr>
       {% endfor %}
     </tbody>
@@ -39,7 +43,7 @@
     <div class="empty-illustration">🏷️</div>
     <h3>No categories yet</h3>
     <p>Create categories to organise your expenses. Popular ones include Food, Transport, Entertainment, and Utilities.</p>
-    <a href="{% url 'category_create' %}" class="btn btn-primary">Add your first category</a>
+    {% if is_family_admin %}<a href="{% url 'category_create' %}" class="btn btn-primary">Add your first category</a>{% endif %}
   </div>
 </div>
 {% endif %}

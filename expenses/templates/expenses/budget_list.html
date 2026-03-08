@@ -3,12 +3,15 @@
 {% block content %}
 <div class="page-header">
   <h1>Budgets</h1>
+  {% if is_family_admin %}
   <a href="{% url 'budget_create' %}" class="btn btn-primary">+ Set Budget</a>
+  {% endif %}
 </div>
 
 <form method="post" id="bulkBudgetForm">
 {% csrf_token %}
 
+{% if is_family_admin %}
 <!-- BULK ACTION BAR -->
 <div id="budgetBulkBar" style="display:none;align-items:center;gap:.5rem;margin-bottom:1rem;padding:.6rem 1rem;background:var(--card-bg);border:1px solid var(--accent);border-radius:var(--radius);">
   <span style="font-size:.82rem;font-weight:600;color:var(--accent);" id="budgetSelCount">0 selected</span>
@@ -18,6 +21,7 @@
   </select>
   <button type="submit" class="btn btn-primary btn-sm" onclick="return confirm('Delete selected budgets?')">Apply</button>
 </div>
+{% endif %}
 
 <!-- OVERALL BUDGETS -->
 {% if overall_budget_data %}
@@ -26,7 +30,7 @@
   <div class="card" style="margin-bottom:1rem;border-left:4px solid var(--accent);">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.75rem;">
       <div style="display:flex;align-items:flex-start;gap:.5rem;">
-        <input type="checkbox" name="selected" value="{{ od.budget.pk }}" class="budget-check" style="width:auto;margin:.25rem 0 0 0;">
+        {% if is_family_admin %}<input type="checkbox" name="selected" value="{{ od.budget.pk }}" class="budget-check" style="width:auto;margin:.25rem 0 0 0;">{% endif %}
         <div>
           <div style="font-weight:800;font-size:1.1rem;">Overall — {{ od.budget.month_name }}</div>
           {% if od.cat_sum and od.cat_sum != od.budget.amount %}
@@ -39,6 +43,7 @@
           {% endif %}
         </div>
       </div>
+      {% if is_family_admin %}
       <div class="act-btns">
         <a href="{% url 'budget_edit' od.budget.pk %}" class="btn btn-outline btn-sm">Edit</a>
         <form method="post" action="{% url 'budget_delete' od.budget.pk %}" style="display:inline;" onsubmit="return confirm('Delete this overall budget?')">
@@ -46,6 +51,7 @@
           <button type="submit" class="btn btn-danger btn-sm">Del</button>
         </form>
       </div>
+      {% endif %}
     </div>
     <div style="display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:.5rem;">
       <span>Spent: <strong class="amount-cell">{{ od.spent|inr }}</strong></span>
@@ -75,12 +81,13 @@
   <div class="card" style="padding:1.25rem;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.85rem;">
       <div style="display:flex;align-items:flex-start;gap:.5rem;">
-        <input type="checkbox" name="selected" value="{{ bd.budget.pk }}" class="budget-check" style="width:auto;margin:.25rem 0 0 0;">
+        {% if is_family_admin %}<input type="checkbox" name="selected" value="{{ bd.budget.pk }}" class="budget-check" style="width:auto;margin:.25rem 0 0 0;">{% endif %}
         <div>
           <div style="font-weight:700;font-size:.95rem;">{{ bd.budget.category.name }}</div>
           <div style="font-size:.78rem;color:var(--muted);">{{ bd.budget.month_name }}</div>
         </div>
       </div>
+      {% if is_family_admin %}
       <div class="act-btns">
         <a href="{% url 'budget_edit' bd.budget.pk %}" class="btn btn-outline btn-sm">Edit</a>
         <form method="post" action="{% url 'budget_delete' bd.budget.pk %}" style="display:inline;" onsubmit="return confirm('Delete this budget?')">
@@ -88,6 +95,7 @@
           <button type="submit" class="btn btn-danger btn-sm">Del</button>
         </form>
       </div>
+      {% endif %}
     </div>
     <div style="display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:.5rem;">
       <span>Spent: <strong class="amount-cell">{{ bd.spent|inr }}</strong></span>
@@ -114,7 +122,7 @@
     <div class="empty-illustration">🎯</div>
     <h3>No budgets set yet</h3>
     <p>Set monthly spending limits per category. An overall budget is auto-created from the sum of your category budgets, but you can override it anytime.</p>
-    <a href="{% url 'budget_create' %}" class="btn btn-primary">Set your first budget</a>
+    {% if is_family_admin %}<a href="{% url 'budget_create' %}" class="btn btn-primary">Set your first budget</a>{% endif %}
   </div>
 </div>
 {% endif %}

@@ -188,8 +188,10 @@
         </td>
         <td style="color:var(--muted);max-width:180px;">{{ e.notes|truncatechars:45|default:"—" }}</td>
         <td class="act-btns">
+          {% if is_family_admin or current_member and current_member.pk == e.spent_by_id %}
           <a href="{% url 'expense_edit' e.pk %}" class="btn btn-outline btn-sm">Edit</a>
           <a href="{% url 'expense_delete' e.pk %}" class="btn btn-danger btn-sm">Del</a>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}
