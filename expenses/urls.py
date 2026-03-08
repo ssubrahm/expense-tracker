@@ -9,8 +9,7 @@ urlpatterns = [
     path("", views.dashboard, name="dashboard"),
     path("spends/", views.spends, name="spends"),
     path("analytics/", views.analytics, name="analytics"),
-    path("reports/", views.reports, name="reports"),
-    path("monthly/", views.monthly_view, name="monthly_view"),
+
     path("export/csv/", views.export_csv, name="export_csv"),
     path("expenses/add/", views.expense_create, name="expense_create"),
     path("expenses/<int:pk>/edit/", views.expense_edit, name="expense_edit"),

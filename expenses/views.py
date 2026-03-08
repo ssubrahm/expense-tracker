@@ -849,11 +849,6 @@ def budget_delete(request, pk):
     return render(request, "expenses/budget_confirm_delete.html", {"budget": budget})
 
 
-def monthly_view(request):
-    """Redirect to Spends with this_month preset."""
-    return redirect("/spends/?date_preset=this_month")
-
-
 @login_required
 def export_csv(request):
     expenses, _ = apply_filters(request)
@@ -947,15 +942,6 @@ def profile(request):
         "member": member,
         "is_admin": _is_admin(request),
     })
-
-
-def reports(request):
-    """Redirect old /reports/ to /analytics/ preserving query params."""
-    qs = request.GET.urlencode()
-    url = "/analytics/"
-    if qs:
-        url += "?" + qs
-    return redirect(url)
 
 
 @login_required
