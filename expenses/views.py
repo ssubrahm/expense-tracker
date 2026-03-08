@@ -849,44 +849,9 @@ def budget_delete(request, pk):
     return render(request, "expenses/budget_confirm_delete.html", {"budget": budget})
 
 
-@login_required
 def monthly_view(request):
-    expenses, filter_form = apply_filters(request)
-    today = date.today()
-
-    grouped = (
-        expenses.annotate(month=TruncMonth("date"))
-        .values("month").annotate(total=Sum("amount"), count=Count("id"))
-        .order_by("-month")
-    )
-
-    months = []
-    for g in grouped:
-        month_expenses = expenses.filter(
-            date__year=g["month"].year, date__month=g["month"].month,
-        ).order_by("-date")
-        budget = Budget.objects.filter(
-            category=None, year=g["month"].year, month=g["month"].month
-        ).first()
-        budget_pct = 0
-        if budget and budget.amount > 0:
-            budget_pct = min(int(g["total"] / budget.amount * 100), 100)
-        months.append({
-            "month": g["month"],
-            "total": g["total"],
-            "count": g["count"],
-            "expenses": month_expenses,
-            "budget": budget,
-            "budget_pct": budget_pct,
-        })
-
-    context = {
-        "months": months,
-        "filter_form": filter_form,
-        "grand_total": expenses.aggregate(t=Sum("amount"))["t"] or 0,
-        "cat_color_map": get_category_color_map(),
-    }
-    return render(request, "expenses/monthly_view.html", context)
+    """Redirect to Spends with this_month preset."""
+    return redirect("/spends/?date_preset=this_month")
 
 
 @login_required
