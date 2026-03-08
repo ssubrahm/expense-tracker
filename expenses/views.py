@@ -315,12 +315,50 @@ def spends(request):
 
 
 def analytics(request):
+    """Merged Analytics + Reports: trends, insights, period reports, budget comparison, assessment."""
     today = date.today()
-    all_expenses = Expense.objects.select_related("category", "spent_by").all()
 
-    # Family member filter
+    # ── Period handling (from Reports) ──
+    period = request.GET.get("period", "monthly")
+    if period == "quarterly":
+        q = (today.month - 1) // 3
+        period_start = date(today.year, q * 3 + 1, 1)
+        period_end = today
+        period_label = f"Q{q + 1} {today.year}"
+        prev_start = date(today.year if q > 0 else today.year - 1, (q - 1) * 3 + 1 if q > 0 else 10, 1)
+        prev_end = period_start - timedelta(days=1)
+    elif period == "half_yearly":
+        if today.month <= 6:
+            period_start = date(today.year, 1, 1)
+            period_label = f"H1 {today.year}"
+            prev_start = date(today.year - 1, 7, 1)
+            prev_end = date(today.year - 1, 12, 31)
+        else:
+            period_start = date(today.year, 7, 1)
+            period_label = f"H2 {today.year}"
+            prev_start = date(today.year, 1, 1)
+            prev_end = date(today.year, 6, 30)
+        period_end = today
+    elif period == "annual":
+        period_start = date(today.year, 1, 1)
+        period_end = today
+        period_label = f"FY {today.year}"
+        prev_start = date(today.year - 1, 1, 1)
+        prev_end = date(today.year - 1, 12, 31)
+    else:
+        period = "monthly"
+        period_start = today.replace(day=1)
+        period_end = today
+        period_label = today.strftime("%B %Y")
+        prev_end = period_start - timedelta(days=1)
+        prev_start = prev_end.replace(day=1)
+
+    # ── Family member filter ──
     member_id = request.GET.get("member")
     selected_member = None
+    family_members = FamilyMember.objects.filter(is_active=True)
+
+    all_expenses = Expense.objects.select_related("category", "spent_by").all()
     if member_id:
         try:
             selected_member = FamilyMember.objects.get(pk=member_id)
@@ -328,7 +366,120 @@ def analytics(request):
         except FamilyMember.DoesNotExist:
             pass
 
-    # --- Monthly trend (12 months) ---
+    # ── Period expenses & previous period (for report section) ──
+    period_expenses = all_expenses.filter(date__gte=period_start, date__lte=period_end)
+    prev_expenses = all_expenses.filter(date__gte=prev_start, date__lte=prev_end)
+
+    period_agg = period_expenses.aggregate(
+        total=Sum("amount"), avg=Avg("amount"), count=Count("id"), biggest=Max("amount"),
+    )
+    period_total = period_agg["total"] or Decimal("0")
+    prev_total = prev_expenses.aggregate(t=Sum("amount"))["t"] or Decimal("0")
+    change_pct = round(float(period_total - prev_total) / float(prev_total) * 100, 1) if prev_total else 0
+
+    # ── Category breakdown with budget comparison (Report) ──
+    cat_breakdown = []
+    cat_spending = (
+        period_expenses.values("category__name", "category__id")
+        .annotate(total=Sum("amount"), count=Count("id"))
+        .order_by("-total")
+    )
+    for cs in cat_spending:
+        cat_name = cs["category__name"] or "Uncategorised"
+        cat_id = cs["category__id"]
+        spent = cs["total"]
+        total_budget = Decimal("0")
+        for b in Budget.objects.filter(category_id=cat_id, year__gte=period_start.year, year__lte=period_end.year):
+            b_date = date(b.year, b.month, 1)
+            if period_start <= b_date <= period_end:
+                total_budget += b.amount
+        gap = spent - total_budget if total_budget > 0 else None
+        pct_of_budget = round(float(spent) / float(total_budget) * 100) if total_budget > 0 else None
+        prev_cat_total = prev_expenses.filter(category_id=cat_id).aggregate(t=Sum("amount"))["t"] or Decimal("0")
+        cat_breakdown.append({
+            "name": cat_name, "spent": spent, "count": cs["count"],
+            "budget": total_budget if total_budget > 0 else None,
+            "gap": gap, "pct_of_budget": pct_of_budget,
+            "prev_spent": prev_cat_total, "change": spent - prev_cat_total,
+        })
+
+    # Overall budget for the period
+    overall_budget_total = Decimal("0")
+    for b in Budget.objects.filter(category__isnull=True, year__gte=period_start.year, year__lte=period_end.year):
+        b_date = date(b.year, b.month, 1)
+        if period_start <= b_date <= period_end:
+            overall_budget_total += b.amount
+    overall_gap = period_total - overall_budget_total if overall_budget_total > 0 else None
+
+    # Payment method breakdown (period)
+    pay_breakdown = (
+        period_expenses.values("payment_method")
+        .annotate(total=Sum("amount"), count=Count("id"))
+        .order_by("-total")
+    )
+
+    # Chart data for category vs budget bar chart
+    rpt_chart_labels = [cb["name"] for cb in cat_breakdown[:8]]
+    rpt_chart_spent = [float(cb["spent"]) for cb in cat_breakdown[:8]]
+    rpt_chart_budget = [float(cb["budget"]) if cb["budget"] else 0 for cb in cat_breakdown[:8]]
+
+    # ── Assessment: The Good / The Not So Good / Recommendations ──
+    the_good, the_not_so_good, recommendations = [], [], []
+    for cb in cat_breakdown:
+        if cb["budget"] and cb["gap"] is not None:
+            if cb["gap"] < 0:
+                the_good.append(f"{cb['name']}: ₹{abs(cb['gap']):,.0f} under budget ({cb['pct_of_budget']}% used)")
+            elif cb["gap"] > 0:
+                the_not_so_good.append(f"{cb['name']}: ₹{cb['gap']:,.0f} over budget ({cb['pct_of_budget']}% used)")
+                recommendations.append(f"Review {cb['name']} spending. Consider reducing by ₹{cb['gap']:,.0f} next period.")
+    if prev_total > 0:
+        if period_total > prev_total:
+            pct_up = round(float(period_total - prev_total) / float(prev_total) * 100, 1)
+            the_not_so_good.append(f"Overall spending increased by {pct_up}% compared to previous period.")
+            recommendations.append(f"Target a {min(pct_up, 15):.0f}% reduction next period.")
+        else:
+            pct_down = round(float(prev_total - period_total) / float(prev_total) * 100, 1)
+            the_good.append(f"Overall spending decreased by {pct_down}% vs previous period — keep it up!")
+    for cb in cat_breakdown:
+        if cb["prev_spent"] > 0 and cb["change"] > 0:
+            jump_pct = round(float(cb["change"]) / float(cb["prev_spent"]) * 100, 1)
+            if jump_pct > 30:
+                the_not_so_good.append(f"{cb['name']} spending jumped {jump_pct}% vs previous period.")
+        elif cb["prev_spent"] > 0 and cb["change"] < 0:
+            drop_pct = round(float(abs(cb["change"])) / float(cb["prev_spent"]) * 100, 1)
+            if drop_pct > 20:
+                the_good.append(f"{cb['name']} spending dropped {drop_pct}% — well managed.")
+    unbudgeted = [cb["name"] for cb in cat_breakdown if cb["budget"] is None and cb["name"] != "Uncategorised"]
+    if unbudgeted:
+        recommendations.append(f"Set budgets for: {', '.join(unbudgeted[:3])}{'...' if len(unbudgeted) > 3 else ''}.")
+    if not the_good:
+        the_good.append("Keep tracking your expenses to build positive spending patterns.")
+    if not the_not_so_good:
+        the_not_so_good.append("No major spending concerns detected for this period.")
+    if not recommendations:
+        recommendations.append("Continue maintaining your current spending discipline.")
+
+    # ── Family member breakdown for period (Report) ──
+    all_period_expenses = Expense.objects.filter(date__gte=period_start, date__lte=period_end)
+    all_prev_expenses = Expense.objects.filter(date__gte=prev_start, date__lte=prev_end)
+    member_breakdown = []
+    for fm in family_members:
+        fm_spent = all_period_expenses.filter(spent_by=fm).aggregate(t=Sum("amount"))["t"] or Decimal("0")
+        fm_prev = all_prev_expenses.filter(spent_by=fm).aggregate(t=Sum("amount"))["t"] or Decimal("0")
+        fm_count = all_period_expenses.filter(spent_by=fm).count()
+        fm_change = round(float(fm_spent - fm_prev) / float(fm_prev) * 100, 1) if fm_prev > 0 else 0
+        fm_top = all_period_expenses.filter(spent_by=fm).values("category__name").annotate(t=Sum("amount")).order_by("-t").first()
+        member_breakdown.append({
+            "member": fm, "spent": fm_spent, "prev": fm_prev, "count": fm_count,
+            "change": fm_change,
+            "top_category": fm_top["category__name"] if fm_top else "—",
+            "pct_of_total": round(float(fm_spent) / float(period_total) * 100, 1) if period_total else 0,
+        })
+    member_breakdown.sort(key=lambda x: x["spent"], reverse=True)
+    report_member_labels = [mb["member"].name for mb in member_breakdown]
+    report_member_data = [float(mb["spent"]) for mb in member_breakdown]
+
+    # ── Trends & Insights (from old Analytics — uses all_expenses, all-time) ──
     monthly_qs = (
         all_expenses.annotate(month=TruncMonth("date"))
         .values("month").annotate(total=Sum("amount"), count=Count("id"))
@@ -336,9 +487,7 @@ def analytics(request):
     )
     monthly_labels = [m["month"].strftime("%b %Y") for m in monthly_qs if m["month"]]
     monthly_totals = [float(m["total"]) for m in monthly_qs if m["month"]]
-    monthly_counts = [m["count"] for m in monthly_qs if m["month"]]
 
-    # Month-over-month change
     mom_changes = []
     for i, v in enumerate(monthly_totals):
         if i == 0:
@@ -347,7 +496,6 @@ def analytics(request):
             prev = monthly_totals[i - 1]
             mom_changes.append(round((v - prev) / prev * 100, 1) if prev else 0)
 
-    # --- Weekly trend (last 12 weeks) ---
     twelve_weeks_ago = today - timedelta(weeks=12)
     weekly_qs = (
         all_expenses.filter(date__gte=twelve_weeks_ago)
@@ -357,16 +505,11 @@ def analytics(request):
     weekly_labels = [w["week"].strftime("W%W %b") for w in weekly_qs if w["week"]]
     weekly_data = [float(w["total"]) for w in weekly_qs if w["week"]]
 
-    # --- Spending heatmap: day-of-week × week ---
-    heatmap_raw = (
-        all_expenses.filter(date__gte=today - timedelta(days=84))
-        .values("date").annotate(total=Sum("amount"))
-    )
+    # Heatmap
+    heatmap_raw = all_expenses.filter(date__gte=today - timedelta(days=84)).values("date").annotate(total=Sum("amount"))
     heatmap = defaultdict(float)
     for row in heatmap_raw:
         heatmap[row["date"].isoformat()] = float(row["total"])
-
-    # Build 12-week grid
     heatmap_weeks = []
     start = today - timedelta(days=today.weekday() + 7 * 11)
     for w in range(12):
@@ -376,181 +519,136 @@ def analytics(request):
             week.append({"date": day.isoformat(), "amount": heatmap.get(day.isoformat(), 0)})
         heatmap_weeks.append(week)
 
-    # --- Category trend: stacked monthly ---
+    # Category stacked trend
     top_cats = list(
-        all_expenses.values("category__name")
-        .annotate(t=Sum("amount")).order_by("-t")
+        all_expenses.values("category__name").annotate(t=Sum("amount")).order_by("-t")
         .values_list("category__name", flat=True)[:6]
     )
     stacked = []
     for i, cat in enumerate(top_cats):
         cat_qs = (
-            all_expenses.filter(category__name=cat)
-            .annotate(month=TruncMonth("date"))
+            all_expenses.filter(category__name=cat).annotate(month=TruncMonth("date"))
             .values("month").annotate(total=Sum("amount")).order_by("month")
         )
-        cat_map = {m["month"].strftime("%b %Y"): float(m["total"]) for m in cat_qs if m["month"]}
+        cat_map_d = {m["month"].strftime("%b %Y"): float(m["total"]) for m in cat_qs if m["month"]}
         stacked.append({
             "label": cat or "Uncategorised",
-            "data": [cat_map.get(l, 0) for l in monthly_labels],
+            "data": [cat_map_d.get(l, 0) for l in monthly_labels],
             "backgroundColor": CHART_COLORS[i % len(CHART_COLORS)],
             "borderColor": CHART_COLORS[i % len(CHART_COLORS)],
-            "fill": False,
-            "tension": 0.4,
+            "fill": False, "tension": 0.4,
         })
 
-    # --- Top expenses ---
     top_expenses = all_expenses.order_by("-amount")[:10]
 
-    # --- Actionable Insights (Copilot-style) ---
+    # ── Smart Insights ──
     insights = []
     if len(monthly_totals) >= 2:
         last = monthly_totals[-1]
-        prev = monthly_totals[-2]
-        diff = last - prev
-        pct = round(abs(diff) / prev * 100, 1) if prev else 0
+        prev_m = monthly_totals[-2]
+        diff = last - prev_m
+        pct = round(abs(diff) / prev_m * 100, 1) if prev_m else 0
         if diff > 0:
-            savings = diff
-            insights.append({
-                "type": "warning", "icon": "📈",
-                "text": f"Spending is up {pct}% vs last month (₹{last:,.2f} vs ₹{prev:,.2f})",
-                "nudge": f"Reduce by ₹{savings:,.0f} this month to match last month's level.",
-            })
+            insights.append({"type": "warning", "icon": "📈",
+                "text": f"Spending is up {pct}% vs last month (₹{last:,.2f} vs ₹{prev_m:,.2f})",
+                "nudge": f"Reduce by ₹{diff:,.0f} this month to match last month's level."})
         else:
-            monthly_saved = abs(diff)
-            yearly_proj = monthly_saved * 12
-            insights.append({
-                "type": "success", "icon": "📉",
+            yearly_proj = abs(diff) * 12
+            insights.append({"type": "success", "icon": "📉",
                 "text": f"Spending is down {pct}% vs last month — great job!",
-                "nudge": f"At this rate, you'll save ₹{yearly_proj:,.0f} over a year. Keep it up!",
-            })
+                "nudge": f"At this rate, you'll save ₹{yearly_proj:,.0f} over a year."})
 
-    # Most expensive category this month with budget context
     this_month_cat = (
         all_expenses.filter(date__year=today.year, date__month=today.month)
         .values("category__name").annotate(t=Sum("amount")).order_by("-t").first()
     )
     if this_month_cat:
-        cat_name = this_month_cat["category__name"] or "Uncategorised"
-        cat_total = this_month_cat["t"]
-        cat_budget = Budget.objects.filter(
-            category__name=cat_name, year=today.year, month=today.month
-        ).first()
-        nudge = ""
-        if cat_budget and cat_total > cat_budget.amount:
-            over = cat_total - cat_budget.amount
-            nudge = f"You're ₹{over:,.0f} over your {cat_name} budget. Review recent purchases."
-        elif cat_budget:
-            left = cat_budget.amount - cat_total
-            nudge = f"₹{left:,.0f} remaining in your {cat_name} budget this month."
+        cn = this_month_cat["category__name"] or "Uncategorised"
+        ct = this_month_cat["t"]
+        cb_obj = Budget.objects.filter(category__name=cn, year=today.year, month=today.month).first()
+        if cb_obj and ct > cb_obj.amount:
+            nudge = f"You're ₹{ct - cb_obj.amount:,.0f} over your {cn} budget."
+        elif cb_obj:
+            nudge = f"₹{cb_obj.amount - ct:,.0f} remaining in your {cn} budget."
         else:
-            nudge = f"Consider setting a budget for {cat_name} to stay in control."
-        insights.append({
-            "type": "info", "icon": "🏆",
-            "text": f"Top category this month: {cat_name} (₹{cat_total:,.2f})",
-            "nudge": nudge,
-        })
+            nudge = f"Consider setting a budget for {cn}."
+        insights.append({"type": "info", "icon": "🏆", "text": f"Top category this month: {cn} (₹{ct:,.2f})", "nudge": nudge})
 
-    # Biggest single day
-    biggest_day = (
-        all_expenses.values("date").annotate(t=Sum("amount")).order_by("-t").first()
-    )
+    biggest_day = all_expenses.values("date").annotate(t=Sum("amount")).order_by("-t").first()
     if biggest_day:
-        insights.append({
-            "type": "info", "icon": "🔥",
+        insights.append({"type": "info", "icon": "🔥",
             "text": f"Biggest spending day: {biggest_day['date']} (₹{biggest_day['t']:,.2f})",
-            "nudge": "Tip: Space out large purchases across the month to maintain steady cash flow.",
-        })
+            "nudge": "Space out large purchases across the month for steadier cash flow."})
 
-    # Weekend vs weekday with advice
     weekday_avg = all_expenses.filter(date__week_day__in=[2,3,4,5,6]).aggregate(a=Avg("amount"))["a"] or 0
     weekend_avg = all_expenses.filter(date__week_day__in=[1,7]).aggregate(a=Avg("amount"))["a"] or 0
     if weekday_avg and weekend_avg:
-        if float(weekend_avg) > float(weekday_avg) * 1.2:
-            nudge = "Your weekends cost significantly more. Try a no-spend Saturday challenge."
-        else:
-            nudge = "Your spending is well-balanced across the week."
-        insights.append({
-            "type": "info", "icon": "📅",
-            "text": f"Weekend avg ₹{weekend_avg:,.2f} vs weekday ₹{weekday_avg:,.2f}",
-            "nudge": nudge,
-        })
+        nudge = "Your weekends cost significantly more. Try a no-spend Saturday challenge." if float(weekend_avg) > float(weekday_avg) * 1.2 else "Spending is well-balanced across the week."
+        insights.append({"type": "info", "icon": "📅", "text": f"Weekend avg ₹{weekend_avg:,.2f} vs weekday ₹{weekday_avg:,.2f}", "nudge": nudge})
 
-    # Most used payment method
-    top_payment = (
-        all_expenses.values("payment_method").annotate(c=Count("id")).order_by("-c").first()
-    )
+    top_payment = all_expenses.values("payment_method").annotate(c=Count("id")).order_by("-c").first()
     if top_payment:
         pm_display = dict(Expense.PAYMENT_CHOICES).get(top_payment["payment_method"], top_payment["payment_method"])
         total_txns = all_expenses.count()
         pm_pct = round(top_payment["c"] / total_txns * 100) if total_txns else 0
-        nudge = ""
-        if pm_pct > 70:
-            nudge = f"{pm_display} is {pm_pct}% of all transactions. Track cash expenses separately to avoid blind spots."
-        else:
-            nudge = f"Good diversification across payment methods."
-        insights.append({
-            "type": "info", "icon": "💳",
-            "text": f"Most used: {pm_display} ({top_payment['c']} transactions, {pm_pct}%)",
-            "nudge": nudge,
-        })
+        nudge = f"{pm_display} is {pm_pct}% of all transactions." if pm_pct > 70 else "Good diversification across payment methods."
+        insights.append({"type": "info", "icon": "💳", "text": f"Most used: {pm_display} ({top_payment['c']} txns, {pm_pct}%)", "nudge": nudge})
 
-    # Overall stats
-    overall = all_expenses.aggregate(
-        total=Sum("amount"), avg=Avg("amount"),
-        count=Count("id"), biggest=Max("amount"),
-    )
+    overall = all_expenses.aggregate(total=Sum("amount"), avg=Avg("amount"), count=Count("id"), biggest=Max("amount"))
 
-    cat_color_map = get_category_color_map()
-
-    # Family member spending comparison (all-time, unfiltered by member)
+    # Family member all-time comparison
     base_expenses = Expense.objects.select_related("spent_by").all()
-    family_members = FamilyMember.objects.filter(is_active=True)
     member_spending = []
     for fm in family_members:
         fm_total = base_expenses.filter(spent_by=fm).aggregate(t=Sum("amount"))["t"] or Decimal("0")
         fm_count = base_expenses.filter(spent_by=fm).count()
-        fm_this_month = base_expenses.filter(
-            spent_by=fm, date__year=today.year, date__month=today.month
-        ).aggregate(t=Sum("amount"))["t"] or Decimal("0")
-        fm_top_cat = (
-            base_expenses.filter(spent_by=fm)
-            .values("category__name").annotate(t=Sum("amount")).order_by("-t").first()
-        )
+        fm_this_month = base_expenses.filter(spent_by=fm, date__year=today.year, date__month=today.month).aggregate(t=Sum("amount"))["t"] or Decimal("0")
+        fm_top_cat = base_expenses.filter(spent_by=fm).values("category__name").annotate(t=Sum("amount")).order_by("-t").first()
         member_spending.append({
-            "member": fm,
-            "total": fm_total,
-            "count": fm_count,
+            "member": fm, "total": fm_total, "count": fm_count,
             "this_month": fm_this_month,
             "top_category": fm_top_cat["category__name"] if fm_top_cat else "—",
         })
     member_spending.sort(key=lambda x: x["total"], reverse=True)
 
-    member_chart_labels = [ms["member"].name for ms in member_spending]
-    member_chart_data = [float(ms["total"]) for ms in member_spending]
-    member_month_data = [float(ms["this_month"]) for ms in member_spending]
-
     context = {
+        # Period / Report data
+        "period": period, "period_label": period_label,
+        "period_start": period_start, "period_end": period_end,
+        "period_total": period_total, "prev_total": prev_total, "change_pct": change_pct,
+        "period_count": period_agg["count"] or 0,
+        "period_avg": period_agg["avg"] or Decimal("0"),
+        "period_biggest": period_agg["biggest"] or Decimal("0"),
+        "cat_breakdown": cat_breakdown,
+        "pay_breakdown": pay_breakdown,
+        "overall_budget_total": overall_budget_total, "overall_gap": overall_gap,
+        "the_good": the_good, "the_not_so_good": the_not_so_good, "recommendations": recommendations,
+        "rpt_chart_labels": json.dumps(rpt_chart_labels),
+        "rpt_chart_spent": json.dumps(rpt_chart_spent),
+        "rpt_chart_budget": json.dumps(rpt_chart_budget),
+        "member_breakdown": member_breakdown,
+        "report_member_labels": json.dumps(report_member_labels),
+        "report_member_data": json.dumps(report_member_data),
+        # Trends / Insights data
         "monthly_labels": json.dumps(monthly_labels),
         "monthly_totals": json.dumps(monthly_totals),
-        "monthly_counts": json.dumps(monthly_counts),
         "mom_changes": json.dumps(mom_changes),
         "weekly_labels": json.dumps(weekly_labels),
         "weekly_data": json.dumps(weekly_data),
         "stacked_datasets": json.dumps(stacked),
         "heatmap_weeks": heatmap_weeks,
-        "heatmap_max": max(heatmap.values()) if heatmap else 1,
         "top_expenses": top_expenses,
         "insights": insights,
         "overall": overall,
         "today": today,
-        "cat_color_map": cat_color_map,
+        "cat_color_map": get_category_color_map(),
+        "chart_colors": json.dumps(CHART_COLORS),
         "family_members": family_members,
         "selected_member": selected_member,
         "member_spending": member_spending,
-        "member_chart_labels": json.dumps(member_chart_labels),
-        "member_chart_data": json.dumps(member_chart_data),
-        "member_month_data": json.dumps(member_month_data),
+        "member_chart_labels": json.dumps([ms["member"].name for ms in member_spending]),
+        "member_chart_data": json.dumps([float(ms["total"]) for ms in member_spending]),
+        "member_month_data": json.dumps([float(ms["this_month"]) for ms in member_spending]),
     }
     return render(request, "expenses/analytics.html", context)
 
@@ -765,265 +863,12 @@ def expense_delete(request, pk):
 
 
 def reports(request):
-    """Spending reports: monthly, quarterly, half-yearly, annual with budget comparison."""
-    today = date.today()
-    period = request.GET.get("period", "monthly")
-    member_id = request.GET.get("member")
-    selected_member = None
-
-    # Build period ranges
-    if period == "quarterly":
-        q = (today.month - 1) // 3
-        period_start = date(today.year, q * 3 + 1, 1)
-        period_end = today
-        period_label = f"Q{q + 1} {today.year}"
-        prev_start = date(today.year if q > 0 else today.year - 1, (q - 1) * 3 + 1 if q > 0 else 10, 1)
-        prev_end = period_start - timedelta(days=1)
-    elif period == "half_yearly":
-        if today.month <= 6:
-            period_start = date(today.year, 1, 1)
-            period_label = f"H1 {today.year}"
-            prev_start = date(today.year - 1, 7, 1)
-            prev_end = date(today.year - 1, 12, 31)
-        else:
-            period_start = date(today.year, 7, 1)
-            period_label = f"H2 {today.year}"
-            prev_start = date(today.year, 1, 1)
-            prev_end = date(today.year, 6, 30)
-        period_end = today
-    elif period == "annual":
-        period_start = date(today.year, 1, 1)
-        period_end = today
-        period_label = f"FY {today.year}"
-        prev_start = date(today.year - 1, 1, 1)
-        prev_end = date(today.year - 1, 12, 31)
-    else:  # monthly
-        period_start = today.replace(day=1)
-        period_end = today
-        period_label = today.strftime("%B %Y")
-        prev_end = period_start - timedelta(days=1)
-        prev_start = prev_end.replace(day=1)
-
-    # Current period expenses
-    expenses = Expense.objects.filter(date__gte=period_start, date__lte=period_end)
-    prev_expenses = Expense.objects.filter(date__gte=prev_start, date__lte=prev_end)
-
-    # Family member filter
-    if member_id:
-        try:
-            selected_member = FamilyMember.objects.get(pk=member_id)
-            expenses = expenses.filter(spent_by=selected_member)
-            prev_expenses = prev_expenses.filter(spent_by=selected_member)
-        except FamilyMember.DoesNotExist:
-            pass
-
-    # Summary stats
-    agg = expenses.aggregate(
-        total=Sum("amount"), avg=Avg("amount"), count=Count("id"),
-        biggest=Max("amount"),
-    )
-    total = agg["total"] or Decimal("0")
-    prev_total = prev_expenses.aggregate(t=Sum("amount"))["t"] or Decimal("0")
-    change_pct = round(float(total - prev_total) / float(prev_total) * 100, 1) if prev_total else 0
-
-    # Category breakdown with budget comparison
-    cat_breakdown = []
-    cat_spending = (
-        expenses.values("category__name", "category__id")
-        .annotate(total=Sum("amount"), count=Count("id"))
-        .order_by("-total")
-    )
-
-    for cs in cat_spending:
-        cat_name = cs["category__name"] or "Uncategorised"
-        cat_id = cs["category__id"]
-        spent = cs["total"]
-
-        # Sum budgets for this category across all months in the period
-        budgets_in_period = Budget.objects.filter(
-            category_id=cat_id,
-            year__gte=period_start.year, year__lte=period_end.year,
-        )
-        # Filter months within period range
-        total_budget = Decimal("0")
-        for b in budgets_in_period:
-            b_date = date(b.year, b.month, 1)
-            if period_start <= b_date <= period_end:
-                total_budget += b.amount
-
-        gap = spent - total_budget if total_budget > 0 else None
-        pct_of_budget = round(float(spent) / float(total_budget) * 100) if total_budget > 0 else None
-
-        # Previous period for this category
-        prev_cat_total = prev_expenses.filter(category_id=cat_id).aggregate(
-            t=Sum("amount")
-        )["t"] or Decimal("0")
-
-        cat_breakdown.append({
-            "name": cat_name,
-            "spent": spent,
-            "count": cs["count"],
-            "budget": total_budget if total_budget > 0 else None,
-            "gap": gap,
-            "pct_of_budget": pct_of_budget,
-            "prev_spent": prev_cat_total,
-            "change": spent - prev_cat_total,
-        })
-
-    # Payment method breakdown
-    pay_breakdown = (
-        expenses.values("payment_method")
-        .annotate(total=Sum("amount"), count=Count("id"))
-        .order_by("-total")
-    )
-
-    # Overall budget for the period
-    overall_budgets = Budget.objects.filter(
-        category__isnull=True,
-        year__gte=period_start.year, year__lte=period_end.year,
-    )
-    overall_budget_total = Decimal("0")
-    for b in overall_budgets:
-        b_date = date(b.year, b.month, 1)
-        if period_start <= b_date <= period_end:
-            overall_budget_total += b.amount
-
-    overall_gap = total - overall_budget_total if overall_budget_total > 0 else None
-
-    # THE GOOD, THE NOT SO GOOD, AND RECOMMENDATIONS
-    the_good = []
-    the_not_so_good = []
-    recommendations = []
-
-    # Analyse: categories under budget
-    for cb in cat_breakdown:
-        if cb["budget"] and cb["gap"] is not None:
-            if cb["gap"] < 0:  # Under budget
-                the_good.append(
-                    f"{cb['name']}: ₹{abs(cb['gap']):,.0f} under budget "
-                    f"({cb['pct_of_budget']}% of allocation used)"
-                )
-            elif cb["gap"] > 0:  # Over budget
-                the_not_so_good.append(
-                    f"{cb['name']}: ₹{cb['gap']:,.0f} over budget "
-                    f"({cb['pct_of_budget']}% of allocation used)"
-                )
-                recommendations.append(
-                    f"Review {cb['name']} spending and set tighter weekly limits. "
-                    f"Consider reducing by ₹{cb['gap']:,.0f} next period."
-                )
-
-    # Analyse: spending trend vs previous period
-    if prev_total > 0:
-        if total > prev_total:
-            pct_up = round(float(total - prev_total) / float(prev_total) * 100, 1)
-            the_not_so_good.append(
-                f"Overall spending increased by {pct_up}% compared to previous period."
-            )
-            recommendations.append(
-                f"Target a {min(pct_up, 15):.0f}% reduction next period by "
-                f"focusing on the top over-budget categories."
-            )
-        else:
-            pct_down = round(float(prev_total - total) / float(prev_total) * 100, 1)
-            the_good.append(
-                f"Overall spending decreased by {pct_down}% vs previous period — keep it up!"
-            )
-
-    # Analyse: categories with big jumps
-    for cb in cat_breakdown:
-        if cb["prev_spent"] > 0 and cb["change"] > 0:
-            jump_pct = round(float(cb["change"]) / float(cb["prev_spent"]) * 100, 1)
-            if jump_pct > 30:
-                the_not_so_good.append(
-                    f"{cb['name']} spending jumped {jump_pct}% vs previous period "
-                    f"(₹{cb['prev_spent']:,.0f} → ₹{cb['spent']:,.0f})"
-                )
-        elif cb["prev_spent"] > 0 and cb["change"] < 0:
-            drop_pct = round(float(abs(cb["change"])) / float(cb["prev_spent"]) * 100, 1)
-            if drop_pct > 20:
-                the_good.append(
-                    f"{cb['name']} spending dropped {drop_pct}% vs previous period — well managed."
-                )
-
-    # Categories without budgets
-    unbudgeted = [cb["name"] for cb in cat_breakdown if cb["budget"] is None and cb["name"] != "Uncategorised"]
-    if unbudgeted:
-        recommendations.append(
-            f"Set budgets for: {', '.join(unbudgeted[:3])}{'...' if len(unbudgeted) > 3 else ''}. "
-            f"Without limits, these categories can grow unchecked."
-        )
-
-    # Default messages if nothing to report
-    if not the_good:
-        the_good.append("Keep tracking your expenses to build positive spending patterns.")
-    if not the_not_so_good:
-        the_not_so_good.append("No major spending concerns detected for this period.")
-    if not recommendations:
-        recommendations.append("Continue maintaining your current spending discipline.")
-
-    # Chart data for category bar chart
-    chart_labels = [cb["name"] for cb in cat_breakdown[:8]]
-    chart_spent = [float(cb["spent"]) for cb in cat_breakdown[:8]]
-    chart_budget = [float(cb["budget"]) if cb["budget"] else 0 for cb in cat_breakdown[:8]]
-
-    # Family member breakdown for this period
-    family_members = FamilyMember.objects.filter(is_active=True)
-    all_period_expenses = Expense.objects.filter(date__gte=period_start, date__lte=period_end)
-    all_prev_expenses = Expense.objects.filter(date__gte=prev_start, date__lte=prev_end)
-    member_breakdown = []
-    for fm in family_members:
-        fm_spent = all_period_expenses.filter(spent_by=fm).aggregate(t=Sum("amount"))["t"] or Decimal("0")
-        fm_prev = all_prev_expenses.filter(spent_by=fm).aggregate(t=Sum("amount"))["t"] or Decimal("0")
-        fm_count = all_period_expenses.filter(spent_by=fm).count()
-        fm_change = 0
-        if fm_prev > 0:
-            fm_change = round(float(fm_spent - fm_prev) / float(fm_prev) * 100, 1)
-        fm_top = all_period_expenses.filter(spent_by=fm).values("category__name").annotate(
-            t=Sum("amount")).order_by("-t").first()
-        member_breakdown.append({
-            "member": fm,
-            "spent": fm_spent,
-            "prev": fm_prev,
-            "count": fm_count,
-            "change": fm_change,
-            "top_category": fm_top["category__name"] if fm_top else "—",
-            "pct_of_total": round(float(fm_spent) / float(total) * 100, 1) if total else 0,
-        })
-    member_breakdown.sort(key=lambda x: x["spent"], reverse=True)
-
-    report_member_labels = [mb["member"].name for mb in member_breakdown]
-    report_member_data = [float(mb["spent"]) for mb in member_breakdown]
-
-    context = {
-        "period": period,
-        "period_label": period_label,
-        "period_start": period_start,
-        "period_end": period_end,
-        "total": total,
-        "prev_total": prev_total,
-        "change_pct": change_pct,
-        "count": agg["count"] or 0,
-        "avg": agg["avg"] or Decimal("0"),
-        "biggest": agg["biggest"] or Decimal("0"),
-        "cat_breakdown": cat_breakdown,
-        "pay_breakdown": pay_breakdown,
-        "overall_budget_total": overall_budget_total,
-        "overall_gap": overall_gap,
-        "the_good": the_good,
-        "the_not_so_good": the_not_so_good,
-        "recommendations": recommendations,
-        "chart_labels": json.dumps(chart_labels),
-        "chart_spent": json.dumps(chart_spent),
-        "chart_budget": json.dumps(chart_budget),
-        "today": today,
-        "family_members": family_members,
-        "selected_member": selected_member,
-        "member_breakdown": member_breakdown,
-        "report_member_labels": json.dumps(report_member_labels),
-        "report_member_data": json.dumps(report_member_data),
-    }
-    return render(request, "expenses/reports.html", context)
+    """Redirect old /reports/ to /analytics/ preserving query params."""
+    qs = request.GET.urlencode()
+    url = "/analytics/"
+    if qs:
+        url += "?" + qs
+    return redirect(url)
 
 
 def category_list(request):

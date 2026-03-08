@@ -3,40 +3,81 @@
 {% block content %}
 
 <div class="page-header">
-  <h1>Analytics &amp; Insights{% if selected_member %} — {{ selected_member.name }}{% endif %}</h1>
+  <h1>Analytics{% if selected_member %} — {{ selected_member.name }}{% endif %}</h1>
   <div class="page-actions" style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;">
-    <a href="{% url 'analytics' %}" class="btn {% if not selected_member %}btn-primary{% else %}btn-outline{% endif %} btn-sm">All Family</a>
+    <a href="{% url 'export_csv' %}" class="btn btn-success btn-sm">⬇ Download CSV</a>
+  </div>
+</div>
+
+<!-- PERIOD SELECTOR + FAMILY FILTER -->
+<div class="card" style="margin-bottom:1rem;padding:.75rem 1.25rem;">
+  <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem;">
+    <span style="font-size:.78rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Period:</span>
+    <a href="?period=monthly{% if selected_member %}&member={{ selected_member.pk }}{% endif %}" class="btn {% if period == 'monthly' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">Monthly</a>
+    <a href="?period=quarterly{% if selected_member %}&member={{ selected_member.pk }}{% endif %}" class="btn {% if period == 'quarterly' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">Quarterly</a>
+    <a href="?period=half_yearly{% if selected_member %}&member={{ selected_member.pk }}{% endif %}" class="btn {% if period == 'half_yearly' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">Half Yearly</a>
+    <a href="?period=annual{% if selected_member %}&member={{ selected_member.pk }}{% endif %}" class="btn {% if period == 'annual' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">Annual</a>
+  </div>
+  {% if family_members %}
+  <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
+    <span style="font-size:.78rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">View for:</span>
+    <a href="?period={{ period }}" class="btn {% if not selected_member %}btn-primary{% else %}btn-outline{% endif %} btn-sm">All Family</a>
     {% for fm in family_members %}
-    <a href="{% url 'analytics' %}?member={{ fm.pk }}" class="btn {% if selected_member.pk == fm.pk %}btn-primary{% else %}btn-outline{% endif %} btn-sm" style="display:inline-flex;align-items:center;gap:.3rem;">
+    <a href="?period={{ period }}&member={{ fm.pk }}" class="btn {% if selected_member.pk == fm.pk %}btn-primary{% else %}btn-outline{% endif %} btn-sm" style="display:inline-flex;align-items:center;gap:.3rem;">
       <span style="width:16px;height:16px;border-radius:50%;background:{{ fm.avatar_color }};display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:.5rem;font-weight:700;">{{ fm.initials }}</span>
       {{ fm.name }}
     </a>
     {% endfor %}
   </div>
+  {% endif %}
 </div>
 
-<!-- OVERALL STATS -->
+<!-- PERIOD REPORT HEADER -->
+<div class="card" style="margin-bottom:1.5rem;">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;">
+    <div>
+      <h2 style="font-size:1.25rem;font-weight:800;margin-bottom:.25rem;">{{ period_label }}</h2>
+      <span style="font-size:.82rem;color:var(--muted);">{{ period_start|date:"d M Y" }} — {{ period_end|date:"d M Y" }}</span>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Total Spent</div>
+      <div style="font-size:1.75rem;font-weight:800;color:var(--text);">{{ p_total|inr }}</div>
+      {% if change_pct != 0 %}
+      <div style="font-size:.82rem;font-weight:600;color:{% if change_pct > 0 %}var(--red){% else %}var(--green){% endif %};">
+        {% if change_pct > 0 %}▲{% else %}▼{% endif %} {{ change_pct }}% vs previous period ({{ prev_total|inr }})
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- PERIOD SUMMARY STATS -->
 <div class="stats-grid">
   <div class="stat-card">
-    <div class="stat-label">All-Time Spend</div>
-    <div class="stat-value">{{ overall.total|inr }}</div>
-    <div class="stat-sub">{{ overall.count }} expenses</div>
+    <div class="stat-label">Expenses</div>
+    <div class="stat-value">{{ p_count }}</div>
+    <div class="stat-sub">transactions</div>
   </div>
   <div class="stat-card g">
-    <div class="stat-label">Avg per Expense</div>
-    <div class="stat-value">{{ overall.avg|inr }}</div>
+    <div class="stat-label">Average</div>
+    <div class="stat-value">{{ p_avg|inr }}</div>
+    <div class="stat-sub">per expense</div>
   </div>
   <div class="stat-card o">
-    <div class="stat-label">Largest Expense</div>
-    <div class="stat-value">{{ overall.biggest|inr }}</div>
+    <div class="stat-label">Largest</div>
+    <div class="stat-value">{{ p_biggest|inr }}</div>
   </div>
-  <div class="stat-card p">
-    <div class="stat-label">Months Tracked</div>
-    <div class="stat-value">{{ monthly_labels|length }}</div>
+  {% if overall_budget_total %}
+  <div class="stat-card {% if overall_gap > 0 %}r{% else %}g{% endif %}">
+    <div class="stat-label">Budget Status</div>
+    <div class="stat-value">{% if overall_gap > 0 %}{{ overall_gap|inr }}{% else %}{{ overall_gap|inr }}{% endif %}</div>
+    <div class="stat-sub">{% if overall_gap > 0 %}over budget ({{ overall_budget_total|inr }}){% else %}under budget ({{ overall_budget_total|inr }}){% endif %}</div>
   </div>
+  {% endif %}
 </div>
 
-<!-- INSIGHTS (Actionable) -->
+<!-- SMART INSIGHTS -->
+{% if insights %}
 <div class="card" style="margin-bottom:1.5rem;">
   <div class="card-title">💡 Smart Insights</div>
   {% for i in insights %}
@@ -49,8 +90,78 @@
   </div>
   {% endfor %}
 </div>
+{% endif %}
 
-<!-- ROW 1: Monthly trend line + MoM change -->
+<!-- SPENDING vs BUDGET CHART -->
+{% if cat_breakdown %}
+<div class="chart-card" style="margin-bottom:1.5rem;">
+  <div class="chart-title">Spending vs Budget by Category — {{ period_label }}</div>
+  <canvas id="catBudgetChart" style="max-height:300px;"></canvas>
+</div>
+{% endif %}
+
+<!-- CATEGORY BREAKDOWN TABLE (BUDGET COMPARISON) -->
+<div class="table-card" style="margin-bottom:1.5rem;">
+  <div class="table-toolbar">
+    <h2>Category Breakdown — Budget Comparison</h2>
+    <span class="table-meta">{{ cat_breakdown|length }} categories</span>
+  </div>
+  {% if cat_breakdown %}
+  <table>
+    <thead>
+      <tr><th>Category</th><th>Spent</th><th>Budget</th><th>Gap</th><th>% Used</th><th>Prev Period</th><th>Change</th></tr>
+    </thead>
+    <tbody>
+      {% for cb in cat_breakdown %}
+      <tr>
+        <td><span class="cat-badge">{{ cb.name }}</span></td>
+        <td class="amount-cell">{{ cb.spent|inr }}</td>
+        <td>{% if cb.budget %}{{ cb.budget|inr }}{% else %}<span style="color:var(--muted)">—</span>{% endif %}</td>
+        <td>
+          {% if cb.gap != None %}
+            {% if cb.gap > 0 %}<span style="color:var(--red);font-weight:600;">+{{ cb.gap|inr }}</span>
+            {% else %}<span style="color:var(--green);font-weight:600;">{{ cb.gap|inr }}</span>{% endif %}
+          {% else %}<span style="color:var(--muted)">—</span>{% endif %}
+        </td>
+        <td>
+          {% if cb.pct_of_budget != None %}
+          <div style="display:flex;align-items:center;gap:.5rem;">
+            <div class="budget-bar-track" style="width:80px;margin:0;">
+              <div class="budget-bar-fill {% if cb.pct_of_budget > 100 %}over{% elif cb.pct_of_budget > 80 %}warn{% endif %}" style="width:{% if cb.pct_of_budget > 100 %}100{% else %}{{ cb.pct_of_budget }}{% endif %}%"></div>
+            </div>
+            <span style="font-size:.78rem;font-weight:600;color:{% if cb.pct_of_budget > 100 %}var(--red){% elif cb.pct_of_budget > 80 %}var(--orange){% else %}var(--green){% endif %};">{{ cb.pct_of_budget }}%</span>
+          </div>
+          {% else %}<span style="color:var(--muted)">—</span>{% endif %}
+        </td>
+        <td style="color:var(--muted);">{% if cb.prev_spent %}{{ cb.prev_spent|inr }}{% else %}—{% endif %}</td>
+        <td>
+          {% if cb.change > 0 %}<span style="color:var(--red);font-size:.82rem;">▲ {{ cb.change|inr }}</span>
+          {% elif cb.change < 0 %}<span style="color:var(--green);font-size:.82rem;">▼ {{ cb.change|inr }}</span>
+          {% else %}<span style="color:var(--muted);font-size:.82rem;">—</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      <tr style="font-weight:700;background:var(--light);">
+        <td>Total</td>
+        <td class="amount-cell">{{ p_total|inr }}</td>
+        <td>{% if overall_budget_total %}{{ overall_budget_total|inr }}{% else %}—{% endif %}</td>
+        <td>{% if overall_gap != None %}{% if overall_gap > 0 %}<span style="color:var(--red);">+{{ overall_gap|inr }}</span>{% else %}<span style="color:var(--green);">{{ overall_gap|inr }}</span>{% endif %}{% else %}—{% endif %}</td>
+        <td></td>
+        <td style="color:var(--muted);">{{ prev_total|inr }}</td>
+        <td>{% if change_pct > 0 %}<span style="color:var(--red);font-size:.82rem;">▲ {{ change_pct }}%</span>{% elif change_pct < 0 %}<span style="color:var(--green);font-size:.82rem;">▼ {{ change_pct }}%</span>{% endif %}</td>
+      </tr>
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-illustration">📋</div>
+    <h3>No expenses for this period</h3>
+    <p>Add expenses to generate analytics.</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- TRENDS: Monthly line + MoM change -->
 <div style="display:grid;grid-template-columns:2fr 1fr;gap:1rem;margin-bottom:1.5rem;">
   <div class="chart-card">
     <div class="chart-title">Monthly Spending (Line)</div>
@@ -62,7 +173,7 @@
   </div>
 </div>
 
-<!-- ROW 2: Weekly trend + top category stacked -->
+<!-- TRENDS: Weekly + stacked category -->
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
   <div class="chart-card">
     <div class="chart-title">Weekly Spending (Last 12 Weeks)</div>
@@ -74,26 +185,21 @@
   </div>
 </div>
 
-<!-- ROW 3: Activity heatmap -->
+<!-- ACTIVITY HEATMAP -->
 <div class="card" style="margin-bottom:1.5rem;">
   <div class="card-title">📅 Spending Activity Heatmap (Last 12 Weeks)</div>
   <div style="display:flex;align-items:flex-start;gap:.5rem;overflow-x:auto;padding-bottom:.5rem;">
     <div class="heatmap-day-labels">
-      <span>&nbsp;</span>
-      <span>Mon</span><span>&nbsp;</span><span>Wed</span><span>&nbsp;</span><span>Fri</span><span>&nbsp;</span>
+      <span>&nbsp;</span><span>Mon</span><span>&nbsp;</span><span>Wed</span><span>&nbsp;</span><span>Fri</span><span>&nbsp;</span>
     </div>
     <div class="heatmap">
       {% for week in heatmap_weeks %}
       <div class="heatmap-week">
         {% for day in week %}
         {% if day.amount > 0 %}
-          <div class="heatmap-cell"
-               style="background: rgba(99,102,241,{{ day.amount|floatformat:2 }});"
-               data-tip="{{ day.date }}: {{ day.amount|inr }}"
-               title="{{ day.date }}: {{ day.amount|inr }}">
-          </div>
+          <div class="heatmap-cell" style="background: rgba(99,102,241,{{ day.amount|floatformat:2 }});" title="{{ day.date }}: {{ day.amount|inr }}"></div>
         {% else %}
-          <div class="heatmap-cell" data-tip="{{ day.date }}: ₹0" title="{{ day.date }}: ₹0"></div>
+          <div class="heatmap-cell" title="{{ day.date }}: ₹0"></div>
         {% endif %}
         {% endfor %}
       </div>
@@ -110,11 +216,68 @@
   </div>
 </div>
 
-<!-- FAMILY MEMBER SPENDING COMPARISON -->
+<!-- PAYMENT METHOD SUMMARY -->
+{% if pay_breakdown %}
+<div class="card" style="margin-bottom:1.5rem;">
+  <div class="card-title">Payment Method Summary — {{ period_label }}</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem;">
+    {% for pm in pay_breakdown %}
+    <div style="display:flex;justify-content:space-between;padding:.5rem 0;border-bottom:1px solid var(--border);">
+      <span class="pay-badge">{{ pm.payment_method|title }}</span>
+      <span style="font-weight:700;color:var(--green);">{{ pm.total|inr }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- FAMILY MEMBER COMPARISON -->
+{% if member_breakdown and not selected_member %}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
+  <div class="chart-card">
+    <div class="chart-title">Family Spending — {{ period_label }}</div>
+    <canvas id="memberPieChart"></canvas>
+  </div>
+  <div class="table-card" style="margin-bottom:0;">
+    <div class="table-toolbar"><h2>Family Member Comparison</h2></div>
+    <table>
+      <thead><tr><th>Member</th><th>Spent</th><th>% of Total</th><th>Expenses</th><th>vs Prev</th><th>Top Category</th></tr></thead>
+      <tbody>
+        {% for mb in member_breakdown %}
+        <tr>
+          <td>
+            <div style="display:flex;align-items:center;gap:.4rem;">
+              <div style="width:22px;height:22px;border-radius:50%;background:{{ mb.member.avatar_color }};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.6rem;flex-shrink:0;">{{ mb.member.initials }}</div>
+              <a href="?period={{ period }}&member={{ mb.member.pk }}" style="font-weight:600;color:var(--text);text-decoration:none;">{{ mb.member.name }}</a>
+            </div>
+          </td>
+          <td class="amount-cell">{{ mb.spent|inr }}</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:.4rem;">
+              <div class="budget-bar-track" style="width:60px;margin:0;"><div class="budget-bar-fill" style="width:{{ mb.pct_of_total }}%;background:{{ mb.member.avatar_color }};"></div></div>
+              <span style="font-size:.78rem;font-weight:600;">{{ mb.pct_of_total }}%</span>
+            </div>
+          </td>
+          <td style="color:var(--muted);">{{ mb.count }}</td>
+          <td>
+            {% if mb.change > 0 %}<span style="color:var(--red);font-size:.82rem;">▲ {{ mb.change }}%</span>
+            {% elif mb.change < 0 %}<span style="color:var(--green);font-size:.82rem;">▼ {{ mb.change }}%</span>
+            {% else %}<span style="color:var(--muted);font-size:.82rem;">—</span>{% endif %}
+          </td>
+          <td><span class="cat-badge">{{ mb.top_category }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- FAMILY ALL-TIME COMPARISON (when not filtered) -->
 {% if member_spending and not selected_member %}
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
   <div class="chart-card">
-    <div class="chart-title">Family Spending Comparison</div>
+    <div class="chart-title">Family Spending Comparison (All-Time)</div>
     <canvas id="familyCompChart"></canvas>
   </div>
   <div class="card">
@@ -127,7 +290,7 @@
           <td>
             <div style="display:flex;align-items:center;gap:.4rem;">
               <div style="width:24px;height:24px;border-radius:50%;background:{{ ms.member.avatar_color }};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.6rem;flex-shrink:0;">{{ ms.member.initials }}</div>
-              <a href="{% url 'analytics' %}?member={{ ms.member.pk }}" style="font-weight:600;color:var(--text);text-decoration:none;">{{ ms.member.name }}</a>
+              <a href="?period={{ period }}&member={{ ms.member.pk }}" style="font-weight:600;color:var(--text);text-decoration:none;">{{ ms.member.name }}</a>
             </div>
           </td>
           <td style="color:var(--muted);">{{ ms.count }}</td>
@@ -142,15 +305,42 @@
 </div>
 {% endif %}
 
-<!-- TOP EXPENSES TABLE -->
-<div class="table-card">
-  <div class="table-toolbar">
-    <h2>Top 10 Biggest Expenses</h2>
+<!-- ASSESSMENT -->
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
+  <div class="card" style="border-top:4px solid var(--green);">
+    <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:1rem;">
+      <span style="font-size:1.5rem;">✅</span>
+      <h3 style="font-size:1rem;font-weight:800;color:var(--green);">The Good</h3>
+    </div>
+    {% for item in the_good %}
+    <div style="padding:.6rem .75rem;background:var(--green-bg);border-radius:var(--radius-sm);margin-bottom:.5rem;font-size:.85rem;line-height:1.5;">{{ item }}</div>
+    {% endfor %}
   </div>
+  <div class="card" style="border-top:4px solid var(--orange);">
+    <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:1rem;">
+      <span style="font-size:1.5rem;">⚠️</span>
+      <h3 style="font-size:1rem;font-weight:800;color:var(--orange);">The Not So Good</h3>
+    </div>
+    {% for item in the_not_so_good %}
+    <div style="padding:.6rem .75rem;background:var(--orange-bg);border-radius:var(--radius-sm);margin-bottom:.5rem;font-size:.85rem;line-height:1.5;">{{ item }}</div>
+    {% endfor %}
+  </div>
+  <div class="card" style="border-top:4px solid var(--accent);">
+    <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:1rem;">
+      <span style="font-size:1.5rem;">💡</span>
+      <h3 style="font-size:1rem;font-weight:800;color:var(--accent);">Recommendations</h3>
+    </div>
+    {% for item in recommendations %}
+    <div style="padding:.6rem .75rem;background:var(--purple-bg);border-radius:var(--radius-sm);margin-bottom:.5rem;font-size:.85rem;line-height:1.5;">{{ item }}</div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- TOP 10 EXPENSES -->
+<div class="table-card" style="margin-bottom:1.5rem;">
+  <div class="table-toolbar"><h2>Top 10 Biggest Expenses</h2></div>
   <table>
-    <thead>
-      <tr><th>#</th><th>Date</th><th>Title</th><th>Category</th><th>Spent By</th><th>Amount</th><th>Payment</th></tr>
-    </thead>
+    <thead><tr><th>#</th><th>Date</th><th>Title</th><th>Category</th><th>Spent By</th><th>Amount</th><th>Payment</th></tr></thead>
     <tbody>
       {% for e in top_expenses %}
       <tr>
@@ -174,40 +364,68 @@
   </table>
 </div>
 
+<style>
+  @media(max-width:900px) {
+    div[style*="grid-template-columns:1fr 1fr 1fr"] { grid-template-columns: 1fr !important; }
+    div[style*="grid-template-columns:2fr 1fr"] { grid-template-columns: 1fr !important; }
+    div[style*="grid-template-columns:1fr 1fr;"] { grid-template-columns: 1fr !important; }
+  }
+</style>
+
 <script>
-const COLORS = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#ec4899','#f97316','#14b8a6','#6366f1'];
-const fmLabels = {{ member_chart_labels|safe }};
-const fmData = {{ member_chart_data|safe }};
-const fmMonthData = {{ member_month_data|safe }};
-const mLabels = {{ monthly_labels|safe }};
-const mTotals = {{ monthly_totals|safe }};
-const momData  = {{ mom_changes|safe }};
-const wLabels  = {{ weekly_labels|safe }};
-const wData    = {{ weekly_data|safe }};
-const stacked  = {{ stacked_datasets|safe }};
+const COLORS = {{ chart_colors|safe }};
 const cTheme = function() {
   const d = document.documentElement.getAttribute('data-theme') === 'dark';
   return { grid: d ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.06)', text: d ? '#94a3b8' : '#64748b' };
 };
+const inrFmt = v => '₹' + v.toLocaleString('en-IN', {minimumFractionDigits: 2});
 
+// Spending vs Budget bar chart
+{% if cat_breakdown %}
+const rptLabels = {{ rpt_chart_labels|safe }};
+const rptSpent = {{ rpt_chart_spent|safe }};
+const rptBudget = {{ rpt_chart_budget|safe }};
+new Chart(document.getElementById('catBudgetChart'), {
+  type: 'bar',
+  data: {
+    labels: rptLabels,
+    datasets: [
+      { label: 'Spent', data: rptSpent, backgroundColor: 'rgba(99,102,241,.7)', borderColor: '#6366f1', borderWidth: 1, borderRadius: 5 },
+      { label: 'Budget', data: rptBudget, backgroundColor: 'rgba(16,185,129,.25)', borderColor: '#10b981', borderWidth: 2, borderDash: [5,5], borderRadius: 5 }
+    ]
+  },
+  options: {
+    responsive: true,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { position: 'top', labels: { font: { size: 11 }, boxWidth: 12, color: cTheme().text } },
+      tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${inrFmt(c.parsed.y)}` } }
+    },
+    scales: {
+      y: { beginAtZero: true, ticks: { callback: v => '₹' + v.toLocaleString('en-IN'), color: cTheme().text }, grid: { color: cTheme().grid } },
+      x: { grid: { display: false }, ticks: { color: cTheme().text } }
+    }
+  }
+});
+{% endif %}
+
+// Monthly line chart
+const mLabels = {{ monthly_labels|safe }};
+const mTotals = {{ monthly_totals|safe }};
+const momData = {{ mom_changes|safe }};
 new Chart(document.getElementById('lineChart'), {
   type: 'line',
   data: {
     labels: mLabels,
     datasets: [{
-      label: 'Monthly Spend',
-      data: mTotals,
-      borderColor: '#6366f1',
-      backgroundColor: 'rgba(99,102,241,.1)',
-      fill: true, tension: 0.4,
-      pointRadius: 5, pointHoverRadius: 7,
-      pointBackgroundColor: '#6366f1',
+      label: 'Monthly Spend', data: mTotals,
+      borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,.1)',
+      fill: true, tension: 0.4, pointRadius: 5, pointHoverRadius: 7, pointBackgroundColor: '#6366f1',
     }]
   },
   options: {
-    responsive: true,
-    interaction: { mode: 'index', intersect: false },
-    plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ₹${c.parsed.y.toLocaleString('en-IN', {minimumFractionDigits: 2})}` } } },
+    responsive: true, interaction: { mode: 'index', intersect: false },
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ${inrFmt(c.parsed.y)}` } } },
     scales: {
       y: { beginAtZero: true, ticks: { callback: v => '₹' + v.toLocaleString('en-IN'), color: cTheme().text }, grid: { color: cTheme().grid } },
       x: { grid: { display: false }, ticks: { color: cTheme().text } }
@@ -215,13 +433,13 @@ new Chart(document.getElementById('lineChart'), {
   }
 });
 
+// MoM change chart
 new Chart(document.getElementById('momChart'), {
   type: 'bar',
   data: {
     labels: mLabels,
     datasets: [{
-      label: 'MoM Change %',
-      data: momData,
+      label: 'MoM Change %', data: momData,
       backgroundColor: momData.map(v => v >= 0 ? 'rgba(239,68,68,.7)' : 'rgba(16,185,129,.7)'),
       borderColor: momData.map(v => v >= 0 ? '#ef4444' : '#10b981'),
       borderWidth: 1, borderRadius: 5,
@@ -237,34 +455,32 @@ new Chart(document.getElementById('momChart'), {
   }
 });
 
+// Weekly chart
+const wLabels = {{ weekly_labels|safe }};
+const wData = {{ weekly_data|safe }};
 new Chart(document.getElementById('weeklyChart'), {
   type: 'bar',
   data: {
     labels: wLabels,
-    datasets: [{
-      label: 'Weekly Spend',
-      data: wData,
-      backgroundColor: 'rgba(139,92,246,.7)',
-      borderColor: '#8b5cf6',
-      borderWidth: 1, borderRadius: 5,
-    }]
+    datasets: [{ label: 'Weekly Spend', data: wData, backgroundColor: 'rgba(139,92,246,.7)', borderColor: '#8b5cf6', borderWidth: 1, borderRadius: 5 }]
   },
   options: {
     responsive: true,
-    plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ₹${c.parsed.y.toLocaleString('en-IN', {minimumFractionDigits: 2})}` } } },
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ${inrFmt(c.parsed.y)}` } } },
     scales: { y: { beginAtZero: true, ticks: { callback: v => '₹' + v.toLocaleString('en-IN'), color: cTheme().text }, grid: { color: cTheme().grid } }, x: { grid: { display: false }, ticks: { color: cTheme().text } } }
   }
 });
 
+// Stacked category chart
+const stacked = {{ stacked_datasets|safe }};
 new Chart(document.getElementById('stackedChart'), {
   type: 'bar',
   data: { labels: mLabels, datasets: stacked },
   options: {
-    responsive: true,
-    interaction: { mode: 'index', intersect: false },
+    responsive: true, interaction: { mode: 'index', intersect: false },
     plugins: {
       legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10, padding: 10, color: cTheme().text } },
-      tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ₹${c.parsed.y.toLocaleString('en-IN', {minimumFractionDigits: 2})}` } }
+      tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${inrFmt(c.parsed.y)}` } }
     },
     scales: {
       y: { beginAtZero: true, stacked: true, ticks: { callback: v => '₹' + v.toLocaleString('en-IN'), color: cTheme().text }, grid: { color: cTheme().grid } },
@@ -273,7 +489,21 @@ new Chart(document.getElementById('stackedChart'), {
   }
 });
 
-// Family comparison chart
+// Family member pie chart (period)
+const rmLabels = {{ report_member_labels|safe }};
+const rmData = {{ report_member_data|safe }};
+if (rmLabels.length > 0 && document.getElementById('memberPieChart')) {
+  new Chart(document.getElementById('memberPieChart'), {
+    type: 'doughnut',
+    data: { labels: rmLabels, datasets: [{ data: rmData, backgroundColor: COLORS.slice(0, rmLabels.length), borderWidth: 2, borderColor: getComputedStyle(document.documentElement).getPropertyValue('--card').trim() || '#fff' }] },
+    options: { responsive: true, cutout: '50%', plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12, padding: 12, color: cTheme().text } }, tooltip: { callbacks: { label: ctx => ` ${inrFmt(ctx.parsed)}` } } } }
+  });
+}
+
+// Family all-time comparison chart
+const fmLabels = {{ member_chart_labels|safe }};
+const fmData = {{ member_chart_data|safe }};
+const fmMonthData = {{ member_month_data|safe }};
 if (fmLabels.length > 0 && document.getElementById('familyCompChart')) {
   new Chart(document.getElementById('familyCompChart'), {
     type: 'bar',
@@ -285,12 +515,8 @@ if (fmLabels.length > 0 && document.getElementById('familyCompChart')) {
       ]
     },
     options: {
-      responsive: true,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { position: 'top', labels: { font: { size: 11 }, boxWidth: 12, color: cTheme().text } },
-        tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ₹${c.parsed.y.toLocaleString('en-IN', {minimumFractionDigits: 2})}` } }
-      },
+      responsive: true, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'top', labels: { font: { size: 11 }, boxWidth: 12, color: cTheme().text } }, tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${inrFmt(c.parsed.y)}` } } },
       scales: { y: { beginAtZero: true, ticks: { callback: v => '₹' + v.toLocaleString('en-IN'), color: cTheme().text }, grid: { color: cTheme().grid } }, x: { grid: { display: false }, ticks: { color: cTheme().text } } }
     }
   });
