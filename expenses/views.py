@@ -9,9 +9,38 @@ from django.db.models.functions import TruncMonth, TruncWeek
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth import update_session_auth_hash
+from django.contrib.auth.forms import PasswordChangeForm
 
 from .models import Expense, Category, Budget, SavedFilter, FamilyMember
 from .forms import ExpenseForm, CategoryForm, BudgetForm, SavedFilterForm, ExpenseFilterForm, FamilyMemberForm
+
+
+def _get_member(request):
+    """Return the FamilyMember linked to the logged-in user, or None."""
+    if request.user.is_authenticated and hasattr(request.user, "family_member"):
+        return request.user.family_member
+    return None
+
+
+def _is_admin(request):
+    """True if logged-in user is a family admin (Srinath) or Django superuser."""
+    member = _get_member(request)
+    return (member and member.is_family_admin) or request.user.is_superuser
+
+
+def _filter_expenses(queryset, request):
+    """All users see all family expenses (read access). No filtering by member for viewing."""
+    return queryset
+
+
+def _can_edit_expense(request, expense):
+    """Non-admin can only edit/delete their own expenses."""
+    if _is_admin(request):
+        return True
+    member = _get_member(request)
+    return member and expense.spent_by == member
 
 
 def _generate_recurring_expenses():
@@ -65,7 +94,7 @@ def get_category_color_map():
 
 
 def apply_filters(request):
-    expenses = Expense.objects.select_related("category", "spent_by").all()
+    expenses = _filter_expenses(Expense.objects.select_related("category", "spent_by").all(), request)
     filter_form = ExpenseFilterForm(request.GET)
 
     if filter_form.is_valid():
@@ -116,9 +145,10 @@ def apply_filters(request):
     return expenses, filter_form
 
 
+@login_required
 def dashboard(request):
     _generate_recurring_expenses()
-    expenses = Expense.objects.select_related("category", "spent_by").all()
+    expenses = _filter_expenses(Expense.objects.select_related("category", "spent_by").all(), request)
     today = date.today()
 
     agg = expenses.aggregate(
@@ -146,7 +176,7 @@ def dashboard(request):
 
     # Monthly trend
     monthly_qs = (
-        Expense.objects.annotate(month=TruncMonth("date"))
+        expenses.annotate(month=TruncMonth("date"))
         .values("month").annotate(total=Sum("amount")).order_by("month")
     )
     monthly_labels = [m["month"].strftime("%b %Y") for m in monthly_qs if m["month"]]
@@ -154,14 +184,14 @@ def dashboard(request):
 
     # Category stacked data per month (top 5)
     top_cats = list(
-        Expense.objects.values("category__name")
+        expenses.values("category__name")
         .annotate(t=Sum("amount")).order_by("-t")
         .values_list("category__name", flat=True)[:5]
     )
     stacked_datasets = []
     for i, cat in enumerate(top_cats):
         cat_monthly = (
-            Expense.objects.filter(category__name=cat)
+            expenses.filter(category__name=cat)
             .annotate(month=TruncMonth("date"))
             .values("month").annotate(total=Sum("amount")).order_by("month")
         )
@@ -184,7 +214,7 @@ def dashboard(request):
 
     # Budget progress for current month
     current_month_total = (
-        Expense.objects.filter(date__year=today.year, date__month=today.month)
+        expenses.filter(date__year=today.year, date__month=today.month)
         .aggregate(t=Sum("amount"))["t"] or Decimal("0")
     )
     overall_budget = Budget.objects.filter(
@@ -198,7 +228,7 @@ def dashboard(request):
     cat_budgets = []
     for b in Budget.objects.filter(year=today.year, month=today.month, category__isnull=False).select_related("category"):
         spent = (
-            Expense.objects.filter(category=b.category, date__year=today.year, date__month=today.month)
+            expenses.filter(category=b.category, date__year=today.year, date__month=today.month)
             .aggregate(t=Sum("amount"))["t"] or Decimal("0")
         )
         pct = min(int(spent / b.amount * 100), 100) if b.amount > 0 else 0
@@ -242,6 +272,7 @@ def dashboard(request):
     return render(request, "expenses/dashboard.html", context)
 
 
+@login_required
 def spends(request):
     """Transactional expense listing with filters, sorting, and saved filters."""
     _generate_recurring_expenses()
@@ -290,7 +321,7 @@ def spends(request):
     total = agg["total"] or Decimal("0")
     count = agg["count"] or 0
 
-    all_amounts = Expense.objects.aggregate(mn=Min("amount"), mx=Max("amount"))
+    all_amounts = _filter_expenses(Expense.objects.all(), request).aggregate(mn=Min("amount"), mx=Max("amount"))
     amount_global_min = float(all_amounts["mn"] or 0)
     amount_global_max = float(all_amounts["mx"] or 1000)
 
@@ -314,6 +345,7 @@ def spends(request):
     return render(request, "expenses/spends.html", context)
 
 
+@login_required
 def analytics(request):
     """Merged Analytics + Reports: trends, insights, period reports, budget comparison, assessment."""
     today = date.today()
@@ -653,6 +685,7 @@ def analytics(request):
     return render(request, "expenses/analytics.html", context)
 
 
+@login_required
 def budget_list(request):
     if request.method == "POST" and "bulk_action" in request.POST:
         selected = request.POST.getlist("selected")
@@ -729,6 +762,7 @@ def budget_list(request):
     })
 
 
+@login_required
 def budget_create(request):
     if request.method == "POST":
         form = BudgetForm(request.POST)
@@ -742,6 +776,7 @@ def budget_create(request):
     return render(request, "expenses/budget_form.html", {"form": form, "title": "Set Budget"})
 
 
+@login_required
 def budget_edit(request, pk):
     budget = get_object_or_404(Budget, pk=pk)
     if request.method == "POST":
@@ -758,6 +793,7 @@ def budget_edit(request, pk):
     })
 
 
+@login_required
 def budget_delete(request, pk):
     budget = get_object_or_404(Budget, pk=pk)
     if request.method == "POST":
@@ -767,6 +803,7 @@ def budget_delete(request, pk):
     return render(request, "expenses/budget_confirm_delete.html", {"budget": budget})
 
 
+@login_required
 def monthly_view(request):
     expenses, filter_form = apply_filters(request)
     today = date.today()
@@ -806,6 +843,7 @@ def monthly_view(request):
     return render(request, "expenses/monthly_view.html", context)
 
 
+@login_required
 def export_csv(request):
     expenses, _ = apply_filters(request)
     sort = request.GET.get("sort", "-date")
@@ -823,23 +861,31 @@ def export_csv(request):
     return response
 
 
+@login_required
 def expense_create(request):
+    member = _get_member(request)
     if request.method == "POST":
         form = ExpenseForm(request.POST)
         if form.is_valid():
             expense = form.save(commit=False)
             if expense.recurrence != "one_time":
                 expense.is_recurring_source = True
+            if not expense.spent_by and member:
+                expense.spent_by = member
             expense.save()
             messages.success(request, "Expense added.")
             return redirect("spends")
     else:
-        form = ExpenseForm(initial={"date": date.today()})
+        form = ExpenseForm(initial={"date": date.today(), "spent_by": member})
     return render(request, "expenses/expense_form.html", {"form": form, "title": "Add Expense"})
 
 
+@login_required
 def expense_edit(request, pk):
     expense = get_object_or_404(Expense, pk=pk)
+    if not _can_edit_expense(request, expense):
+        messages.error(request, "You can only edit your own expenses.")
+        return redirect("spends")
     if request.method == "POST":
         form = ExpenseForm(request.POST, instance=expense)
         if form.is_valid():
@@ -853,13 +899,38 @@ def expense_edit(request, pk):
     return render(request, "expenses/expense_form.html", {"form": form, "title": "Edit Expense", "expense": expense})
 
 
+@login_required
 def expense_delete(request, pk):
     expense = get_object_or_404(Expense, pk=pk)
+    if not _can_edit_expense(request, expense):
+        messages.error(request, "You can only delete your own expenses.")
+        return redirect("spends")
     if request.method == "POST":
         expense.delete()
         messages.success(request, "Expense deleted.")
         return redirect("dashboard")
     return render(request, "expenses/expense_confirm_delete.html", {"expense": expense})
+
+
+@login_required
+@login_required
+def profile(request):
+    """Profile page: change password."""
+    member = _get_member(request)
+    if request.method == "POST":
+        pw_form = PasswordChangeForm(request.user, request.POST)
+        if pw_form.is_valid():
+            user = pw_form.save()
+            update_session_auth_hash(request, user)
+            messages.success(request, "Password updated successfully.")
+            return redirect("profile")
+    else:
+        pw_form = PasswordChangeForm(request.user)
+    return render(request, "expenses/profile.html", {
+        "pw_form": pw_form,
+        "member": member,
+        "is_admin": _is_admin(request),
+    })
 
 
 def reports(request):
@@ -871,6 +942,7 @@ def reports(request):
     return redirect(url)
 
 
+@login_required
 def category_list(request):
     categories = Category.objects.annotate(
         total=Sum("expenses__amount"), count=Count("expenses"),
@@ -881,6 +953,7 @@ def category_list(request):
     })
 
 
+@login_required
 def category_create(request):
     if request.method == "POST":
         form = CategoryForm(request.POST)
@@ -893,6 +966,7 @@ def category_create(request):
     return render(request, "expenses/category_form.html", {"form": form, "title": "Add Category"})
 
 
+@login_required
 def category_delete(request, pk):
     category = get_object_or_404(Category, pk=pk)
     if request.method == "POST":
@@ -904,6 +978,7 @@ def category_delete(request, pk):
 
 # ── Family Member CRUD ──────────────────────────────────────────
 
+@login_required
 def family_list(request):
     members = FamilyMember.objects.filter(is_active=True).annotate(
         total=Sum("expenses__amount"),
@@ -932,7 +1007,11 @@ def family_list(request):
     })
 
 
+@login_required
 def family_create(request):
+    if not _is_admin(request):
+        messages.error(request, "Only the family admin can add members.")
+        return redirect("family_list")
     if request.method == "POST":
         form = FamilyMemberForm(request.POST)
         if form.is_valid():
@@ -944,7 +1023,11 @@ def family_create(request):
     return render(request, "expenses/family_form.html", {"form": form, "title": "Add Family Member"})
 
 
+@login_required
 def family_edit(request, pk):
+    if not _is_admin(request):
+        messages.error(request, "Only the family admin can edit members.")
+        return redirect("family_list")
     member = get_object_or_404(FamilyMember, pk=pk)
     if request.method == "POST":
         form = FamilyMemberForm(request.POST, instance=member)
@@ -957,7 +1040,11 @@ def family_edit(request, pk):
     return render(request, "expenses/family_form.html", {"form": form, "title": f"Edit {member.name}", "member": member})
 
 
+@login_required
 def family_delete(request, pk):
+    if not _is_admin(request):
+        messages.error(request, "Only the family admin can remove members.")
+        return redirect("family_list")
     member = get_object_or_404(FamilyMember, pk=pk)
     if request.method == "POST":
         member.is_active = False

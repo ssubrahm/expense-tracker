@@ -2,6 +2,7 @@
 from datetime import date
 from decimal import Decimal
 
+from django.contrib.auth.models import User
 from django.core.management.base import BaseCommand
 
 from expenses.models import Category, Expense, Budget, FamilyMember
@@ -22,16 +23,37 @@ class Command(BaseCommand):
             cat_map[name] = cat
             self.stdout.write(f"  {'Created' if created else 'Exists'}: {name}")
 
-        # ── Family member: Srinath (self) ──
+        # ── Family member: Srinath (self, admin) ──
         srinath, created = FamilyMember.objects.get_or_create(
             name="Srinath",
             defaults={
                 "relationship": "self",
                 "avatar_color": "#6366f1",
                 "is_active": True,
+                "is_family_admin": True,
             },
         )
+        if not srinath.is_family_admin:
+            srinath.is_family_admin = True
+            srinath.save()
         self.stdout.write(f"\n  Family member: {'Created' if created else 'Exists'} — {srinath.name}")
+
+        # ── Create User account for Srinath ──
+        if not srinath.user:
+            user, u_created = User.objects.get_or_create(
+                username="srinath",
+                defaults={"first_name": "Srinath", "is_staff": True},
+            )
+            if u_created:
+                user.set_password("srinath123")
+                user.save()
+                self.stdout.write("  User: Created 'srinath' (password: srinath123)")
+            else:
+                self.stdout.write("  User: Exists 'srinath'")
+            srinath.user = user
+            srinath.save()
+        else:
+            self.stdout.write(f"  User: Already linked — {srinath.user.username}")
 
         # ── Expenses ──
         # (date, title, amount, category, payment_method, recurrence)

@@ -1037,6 +1037,12 @@
       <span id="themeIcon">🌙</span>
     </button>
     <a href="{% url 'expense_create' %}" class="nav-link nav-cta desktop-cta">+ Add Expense</a>
+    {% if user.is_authenticated %}
+    <a href="{% url 'profile' %}" class="nav-link desktop-link" style="font-size:.78rem;margin-left:.5rem;" title="Profile">
+      👤 {{ user.first_name|default:user.username }}
+    </a>
+    <a href="{% url 'logout' %}" class="nav-link desktop-link" style="font-size:.78rem;color:var(--muted);" title="Logout">Logout</a>
+    {% endif %}
   </div>
 </nav>
 

@@ -1,0 +1,54 @@
+{% extends "expenses/base.html" %}
+{% block content %}
+<div class="page-header">
+  <h1>My Profile</h1>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;max-width:800px;">
+  <!-- ACCOUNT INFO -->
+  <div class="card">
+    <div class="card-title">Account Details</div>
+    <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem;">
+      {% if member %}
+      <div style="width:56px;height:56px;border-radius:50%;background:{{ member.avatar_color }};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:1.25rem;">{{ member.initials }}</div>
+      <div>
+        <div style="font-weight:800;font-size:1.1rem;">{{ member.name }}</div>
+        <div style="font-size:.82rem;color:var(--muted);">{{ member.get_relationship_display }}{% if is_admin %} · <span style="color:var(--accent);font-weight:600;">Admin</span>{% endif %}</div>
+        {% if member.email %}<div style="font-size:.82rem;color:var(--muted);">{{ member.email }}</div>{% endif %}
+      </div>
+      {% else %}
+      <div>
+        <div style="font-weight:800;font-size:1.1rem;">{{ request.user.username }}</div>
+        <div style="font-size:.82rem;color:var(--muted);">No family profile linked</div>
+      </div>
+      {% endif %}
+    </div>
+    <div style="font-size:.82rem;color:var(--muted);">
+      <strong>Username:</strong> {{ request.user.username }}<br>
+      <strong>Joined:</strong> {{ request.user.date_joined|date:"d M Y" }}
+    </div>
+  </div>
+
+  <!-- CHANGE PASSWORD -->
+  <div class="card">
+    <div class="card-title">Change Password</div>
+    <form method="post">
+      {% csrf_token %}
+      {% for field in pw_form %}
+      <div style="margin-bottom:1rem;">
+        <label style="display:block;font-size:.82rem;font-weight:600;margin-bottom:.35rem;">{{ field.label }}</label>
+        <input type="password" name="{{ field.html_name }}" id="{{ field.id_for_label }}"
+               style="width:100%;" {% if field.errors %}class="error-field"{% endif %}>
+        {% if field.help_text %}
+        <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem;">{{ field.help_text|safe }}</div>
+        {% endif %}
+        {% for error in field.errors %}
+        <div style="font-size:.78rem;color:var(--red);margin-top:.2rem;">{{ error }}</div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+      <button type="submit" class="btn btn-primary">Update Password</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
