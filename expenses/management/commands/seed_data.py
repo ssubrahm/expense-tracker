@@ -55,6 +55,36 @@ class Command(BaseCommand):
         else:
             self.stdout.write(f"  User: Already linked — {srinath.user.username}")
 
+        # ── Other family members ──
+        family_members = [
+            {"name": "Jeejibai S", "relationship": "spouse", "avatar_color": "#ec4899", "username": "jeejibai", "password": "jeejibai123"},
+            {"name": "Madhumita S", "relationship": "child", "avatar_color": "#f59e0b", "username": "madhumita", "password": "madhumita123"},
+            {"name": "Roopa", "relationship": "parent", "avatar_color": "#10b981", "username": "roopa", "password": "roopa123"},
+        ]
+        for fm_data in family_members:
+            fm, fm_created = FamilyMember.objects.get_or_create(
+                name=fm_data["name"],
+                defaults={
+                    "relationship": fm_data["relationship"],
+                    "avatar_color": fm_data["avatar_color"],
+                    "is_active": True,
+                },
+            )
+            self.stdout.write(f"  Family member: {'Created' if fm_created else 'Exists'} — {fm.name}")
+            if not fm.user:
+                u, u_created = User.objects.get_or_create(
+                    username=fm_data["username"],
+                    defaults={"first_name": fm_data["name"]},
+                )
+                if u_created:
+                    u.set_password(fm_data["password"])
+                    u.save()
+                    self.stdout.write(f"    User: Created '{fm_data['username']}' (password: {fm_data['password']})")
+                else:
+                    self.stdout.write(f"    User: Exists '{fm_data['username']}'")
+                fm.user = u
+                fm.save()
+
         # ── Expenses ──
         # (date, title, amount, category, payment_method, recurrence)
         expenses = [

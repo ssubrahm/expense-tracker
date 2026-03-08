@@ -43,6 +43,34 @@ def _can_edit_expense(request, expense):
     return member and expense.spent_by == member
 
 
+def _save_member_credentials(family_member, form):
+    """Create or update User account from form's username/password fields."""
+    from django.contrib.auth.models import User
+    username = form.cleaned_data.get("username", "").strip()
+    password = form.cleaned_data.get("password", "").strip()
+    if not username:
+        return
+    if family_member.user:
+        if family_member.user.username != username:
+            family_member.user.username = username
+            family_member.user.save()
+        if password:
+            family_member.user.set_password(password)
+            family_member.user.save()
+    else:
+        user = User.objects.create_user(
+            username=username,
+            first_name=family_member.name,
+        )
+        if password:
+            user.set_password(password)
+        else:
+            user.set_unusable_password()
+        user.save()
+        family_member.user = user
+        family_member.save()
+
+
 def _generate_recurring_expenses():
     """Generate any due recurring expenses. Safe to call multiple times."""
     today = date.today()
@@ -980,7 +1008,7 @@ def category_delete(request, pk):
 
 @login_required
 def family_list(request):
-    members = FamilyMember.objects.filter(is_active=True).annotate(
+    members = FamilyMember.objects.filter(is_active=True).select_related("user").annotate(
         total=Sum("expenses__amount"),
         count=Count("expenses"),
     ).order_by("name")
@@ -1015,7 +1043,8 @@ def family_create(request):
     if request.method == "POST":
         form = FamilyMemberForm(request.POST)
         if form.is_valid():
-            form.save()
+            fm = form.save()
+            _save_member_credentials(fm, form)
             messages.success(request, f"Family member '{form.cleaned_data['name']}' added.")
             return redirect("family_list")
     else:
@@ -1025,19 +1054,37 @@ def family_create(request):
 
 @login_required
 def family_edit(request, pk):
-    if not _is_admin(request):
-        messages.error(request, "Only the family admin can edit members.")
-        return redirect("family_list")
     member = get_object_or_404(FamilyMember, pk=pk)
+    current_member = _get_member(request)
+    is_admin = _is_admin(request)
+    is_own = current_member and current_member.pk == member.pk
+
+    if not is_admin and not is_own:
+        messages.error(request, "You can only edit your own profile.")
+        return redirect("family_list")
+
     if request.method == "POST":
-        form = FamilyMemberForm(request.POST, instance=member)
+        if is_admin:
+            form = FamilyMemberForm(request.POST, instance=member)
+        else:
+            form = FamilyMemberForm(request.POST, instance=member)
         if form.is_valid():
-            form.save()
+            fm = form.save()
+            _save_member_credentials(fm, form)
             messages.success(request, f"'{member.name}' updated.")
             return redirect("family_list")
     else:
         form = FamilyMemberForm(instance=member)
-    return render(request, "expenses/family_form.html", {"form": form, "title": f"Edit {member.name}", "member": member})
+
+    if not is_admin:
+        for field_name in ["relationship", "is_active"]:
+            if field_name in form.fields:
+                form.fields[field_name].disabled = True
+
+    return render(request, "expenses/family_form.html", {
+        "form": form, "title": f"Edit {member.name}", "member": member,
+        "is_admin": is_admin, "is_own": is_own,
+    })
 
 
 @login_required

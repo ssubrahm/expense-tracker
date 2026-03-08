@@ -3,6 +3,16 @@ from .models import Expense, Category, Budget, SavedFilter, FamilyMember
 
 
 class FamilyMemberForm(forms.ModelForm):
+    username = forms.CharField(
+        max_length=150, required=False,
+        help_text="Login username. Leave blank to keep unchanged.",
+    )
+    password = forms.CharField(
+        max_length=128, required=False,
+        widget=forms.PasswordInput(attrs={"placeholder": "Leave blank to keep unchanged"}),
+        help_text="Set or change password. Leave blank to keep current.",
+    )
+
     class Meta:
         model = FamilyMember
         fields = ["name", "email", "phone", "relationship", "gender", "date_of_birth", "avatar_color"]
@@ -10,6 +20,11 @@ class FamilyMemberForm(forms.ModelForm):
             "date_of_birth": forms.DateInput(attrs={"type": "date"}),
             "avatar_color": forms.TextInput(attrs={"type": "color", "style": "width:50px;height:36px;padding:2px;"}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk and self.instance.user:
+            self.fields["username"].initial = self.instance.user.username
 
 
 class ExpenseForm(forms.ModelForm):

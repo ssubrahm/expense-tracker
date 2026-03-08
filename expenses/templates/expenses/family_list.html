@@ -3,7 +3,9 @@
 {% block content %}
 <div class="page-header">
   <h1>Family Members</h1>
+  {% if is_family_admin %}
   <a href="{% url 'family_create' %}" class="btn btn-primary">+ Add Member</a>
+  {% endif %}
 </div>
 
 {% if member_data %}
@@ -25,16 +27,24 @@
         </div>
       </div>
       <div class="act-btns" style="flex-shrink:0;">
+        {% if is_family_admin or current_member.pk == md.member.pk %}
         <a href="{% url 'family_edit' md.member.pk %}" class="btn btn-outline btn-sm">Edit</a>
+        {% endif %}
+        {% if is_family_admin %}
         <a href="{% url 'family_delete' md.member.pk %}" class="btn btn-danger btn-sm">Del</a>
+        {% endif %}
       </div>
     </div>
-    {% if md.member.email or md.member.phone %}
     <div style="font-size:.78rem;color:var(--muted);margin-bottom:.75rem;display:flex;gap:1rem;flex-wrap:wrap;">
+      {% if md.member.user %}
+        <span>🔑 {{ md.member.user.username }}</span>
+      {% else %}
+        <span style="color:var(--orange);">⚠ No login</span>
+      {% endif %}
       {% if md.member.email %}<span>✉️ {{ md.member.email }}</span>{% endif %}
       {% if md.member.phone %}<span>📱 {{ md.member.phone }}</span>{% endif %}
+      {% if md.member.is_family_admin %}<span style="color:var(--accent);font-weight:600;">👑 Admin</span>{% endif %}
     </div>
-    {% endif %}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;">
       <div>
         <div style="font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Total Spent</div>
@@ -55,8 +65,8 @@
     </div>
     <div style="margin-top:1rem;display:flex;gap:.35rem;">
       <a href="{% url 'analytics' %}?member={{ md.member.pk }}" class="btn btn-outline btn-sm" style="flex:1;justify-content:center;">📊 Analytics</a>
-      <a href="{% url 'reports' %}?member={{ md.member.pk }}" class="btn btn-outline btn-sm" style="flex:1;justify-content:center;">📋 Reports</a>
-      <a href="{% url 'dashboard' %}?family_members={{ md.member.pk }}" class="btn btn-outline btn-sm" style="flex:1;justify-content:center;">📈 Expenses</a>
+      <a href="{% url 'analytics' %}?period=quarterly&member={{ md.member.pk }}" class="btn btn-outline btn-sm" style="flex:1;justify-content:center;">📋 Reports</a>
+      <a href="{% url 'spends' %}?family_members={{ md.member.pk }}" class="btn btn-outline btn-sm" style="flex:1;justify-content:center;">📈 Expenses</a>
     </div>
   </div>
   {% endfor %}
