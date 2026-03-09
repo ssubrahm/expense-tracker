@@ -39,8 +39,33 @@
 
 
 
-<!-- CHARTS -->
-<div class="charts-grid">
+<!-- BY CATEGORY: Chart + Table side-by-side -->
+{% if by_category %}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
+  <div class="chart-card">
+    <div class="chart-title">By Category</div>
+    <canvas id="categoryChart"></canvas>
+  </div>
+  <div class="card">
+    <div class="card-title">Category Breakdown</div>
+    <table>
+      <thead><tr><th>Category</th><th>Count</th><th>Total</th></tr></thead>
+      <tbody>
+        {% for r in by_category %}
+        <tr>
+          <td><span class="cat-badge">{{ r.category__name|default:"Uncategorised" }}</span></td>
+          <td style="color:var(--muted)">{{ r.count }}</td>
+          <td class="amount-cell">{{ r.total|inr }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- SPENDING TREND + PAYMENT METHOD side-by-side -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
   <div class="chart-card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.85rem;">
       <div class="chart-title" style="margin:0">Spending Trend</div>
@@ -52,21 +77,34 @@
     </div>
     <canvas id="trendChart"></canvas>
   </div>
-  <div class="chart-card">
-    <div class="chart-title">By Category</div>
-    <canvas id="categoryChart"></canvas>
+  {% if by_payment %}
+  <div class="card">
+    <div class="card-title">By Payment Method</div>
+    <table>
+      <thead><tr><th>Method</th><th>Count</th><th>Total</th></tr></thead>
+      <tbody>
+        {% for r in by_payment %}
+        <tr>
+          <td><span class="pay-badge">{{ r.payment_method|title }}</span></td>
+          <td style="color:var(--muted)">{{ r.count }}</td>
+          <td class="amount-cell">{{ r.total|inr }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
+  {% endif %}
 </div>
 
-<!-- FAMILY SPENDING CHART -->
+<!-- BY FAMILY MEMBER: Chart + Table side-by-side -->
 {% if by_member and by_member|length > 0 %}
-<div class="charts-row2" style="margin-bottom:1.5rem;">
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
   <div class="chart-card">
-    <div class="chart-title">Spending by Family Member</div>
+    <div class="chart-title">By Family Member</div>
     <canvas id="memberChart"></canvas>
   </div>
   <div class="card">
-    <div class="card-title">By Family Member</div>
+    <div class="card-title">Family Breakdown</div>
     <table>
       <thead><tr><th>Member</th><th>Count</th><th>Total</th></tr></thead>
       <tbody>
@@ -90,41 +128,12 @@
 </div>
 {% endif %}
 
-<!-- BREAKDOWN TABLES -->
-{% if by_category %}
-<div class="two-col">
-  <div class="card">
-    <div class="card-title">By Category</div>
-    <table>
-      <thead><tr><th>Category</th><th>Count</th><th>Total</th></tr></thead>
-      <tbody>
-        {% for r in by_category %}
-        <tr>
-          <td><span class="cat-badge">{{ r.category__name|default:"Uncategorised" }}</span></td>
-          <td style="color:var(--muted)">{{ r.count }}</td>
-          <td class="amount-cell">{{ r.total|inr }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  <div class="card">
-    <div class="card-title">By Payment Method</div>
-    <table>
-      <thead><tr><th>Method</th><th>Count</th><th>Total</th></tr></thead>
-      <tbody>
-        {% for r in by_payment %}
-        <tr>
-          <td><span class="pay-badge">{{ r.payment_method|title }}</span></td>
-          <td style="color:var(--muted)">{{ r.count }}</td>
-          <td class="amount-cell">{{ r.total|inr }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
-{% endif %}
+<style>
+@media(max-width:768px) {
+  div[style*="grid-template-columns: 1fr 1fr"],
+  div[style*="grid-template-columns:1fr 1fr"] { grid-template-columns: 1fr !important; }
+}
+</style>
 
 <script>
 const COLORS = {{ chart_colors|safe }};

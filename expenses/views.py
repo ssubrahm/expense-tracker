@@ -570,6 +570,12 @@ def analytics(request):
     )
     weekly_labels = [w["week"].strftime("W%W %b") for w in weekly_qs if w["week"]]
     weekly_data = [float(w["total"]) for w in weekly_qs if w["week"]]
+    wow_changes = []
+    for i, val in enumerate(weekly_data):
+        if i == 0 or weekly_data[i - 1] == 0:
+            wow_changes.append(0)
+        else:
+            wow_changes.append(round((val - weekly_data[i - 1]) / weekly_data[i - 1] * 100, 1))
 
     # Heatmap
     heatmap_raw = all_expenses.filter(date__gte=today - timedelta(days=84)).values("date").annotate(total=Sum("amount"))
@@ -701,6 +707,7 @@ def analytics(request):
         "mom_changes": json.dumps(mom_changes),
         "weekly_labels": json.dumps(weekly_labels),
         "weekly_data": json.dumps(weekly_data),
+        "wow_changes": json.dumps(wow_changes),
         "stacked_datasets": json.dumps(stacked),
         "heatmap_weeks": heatmap_weeks,
         "top_expenses": top_expenses,
