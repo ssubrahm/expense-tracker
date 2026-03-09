@@ -6,135 +6,218 @@
   <h1>Dashboard</h1>
 </div>
 
-<!-- STAT CARDS -->
-<div class="stats-grid">
-  <div class="stat-card">
-    <div class="stat-label">Total Spent</div>
-    <div class="stat-value">{{ total|inr }}</div>
-    <div class="stat-sub">{{ count }} expense{{ count|pluralize }}</div>
+<!-- ============================================================
+     SECTION: Overview
+     ============================================================ -->
+<div class="a-section" data-section="d-overview">
+  <div class="a-section-header" onclick="toggleSection(this)">
+    <span>📊 Overview</span>
+    <span class="a-chevron">▾</span>
   </div>
-  <div class="stat-card g">
-    <div class="stat-label">Avg per Expense</div>
-    <div class="stat-value">{{ avg_expense|inr }}</div>
-  </div>
-  <div class="stat-card p">
-    <div class="stat-label">Avg Daily Spend</div>
-    <div class="stat-value">{{ avg_daily|inr }}</div>
-  </div>
-  <div class="stat-card o">
-    <div class="stat-label">Biggest Expense</div>
-    <div class="stat-value">{{ biggest|inr }}</div>
-  </div>
-  {% if overall_budget %}
-  <div class="stat-card {% if budget_pct >= 90 %}r{% elif budget_pct >= 70 %}o{% endif %}">
-    <div class="stat-label">This Month Budget</div>
-    <div class="stat-value">{{ current_month_total|inr }}</div>
-    <div class="budget-bar">
-      <div class="budget-bar-fill {% if budget_pct >= 90 %}danger{% elif budget_pct >= 70 %}warn{% endif %}" style="width:{{ budget_pct }}%"></div>
+  <div class="a-section-body">
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Total Spent</div>
+        <div class="stat-value">{{ total|inr }}</div>
+        <div class="stat-sub">{{ count }} expense{{ count|pluralize }}</div>
+      </div>
+      <div class="stat-card g">
+        <div class="stat-label">Avg per Expense</div>
+        <div class="stat-value">{{ avg_expense|inr }}</div>
+      </div>
+      <div class="stat-card p">
+        <div class="stat-label">Avg Daily Spend</div>
+        <div class="stat-value">{{ avg_daily|inr }}</div>
+      </div>
+      <div class="stat-card o">
+        <div class="stat-label">Biggest Expense</div>
+        <div class="stat-value">{{ biggest|inr }}</div>
+      </div>
+      {% if overall_budget %}
+      <div class="stat-card {% if budget_pct >= 90 %}r{% elif budget_pct >= 70 %}o{% endif %}">
+        <div class="stat-label">This Month Budget</div>
+        <div class="stat-value">{{ current_month_total|inr }}</div>
+        <div class="budget-bar">
+          <div class="budget-bar-fill {% if budget_pct >= 90 %}danger{% elif budget_pct >= 70 %}warn{% endif %}" style="width:{{ budget_pct }}%"></div>
+        </div>
+        <div class="stat-sub">{{ budget_pct }}% of {{ overall_budget.amount|inr }} budget</div>
+      </div>
+      {% endif %}
     </div>
-    <div class="stat-sub">{{ budget_pct }}% of {{ overall_budget.amount|inr }} budget</div>
   </div>
-  {% endif %}
 </div>
 
-
-
-<!-- BY CATEGORY: Chart + Table side-by-side -->
+<!-- ============================================================
+     SECTION: By Category
+     ============================================================ -->
 {% if by_category %}
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
-  <div class="chart-card">
-    <div class="chart-title">By Category</div>
-    <canvas id="categoryChart"></canvas>
+<div class="a-section" data-section="d-category">
+  <div class="a-section-header" onclick="toggleSection(this)">
+    <span>🏷️ By Category</span>
+    <span class="a-chevron">▾</span>
   </div>
-  <div class="card">
-    <div class="card-title">Category Breakdown</div>
-    <table>
-      <thead><tr><th>Category</th><th>Count</th><th>Total</th></tr></thead>
-      <tbody>
-        {% for r in by_category %}
-        <tr>
-          <td><span class="cat-badge">{{ r.category__name|default:"Uncategorised" }}</span></td>
-          <td style="color:var(--muted)">{{ r.count }}</td>
-          <td class="amount-cell">{{ r.total|inr }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
-{% endif %}
-
-<!-- SPENDING TREND + PAYMENT METHOD side-by-side -->
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
-  <div class="chart-card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.85rem;">
-      <div class="chart-title" style="margin:0">Spending Trend</div>
-      <div style="display:flex;gap:.35rem;">
-        <button class="btn btn-outline btn-sm active" id="btnBar" onclick="setChartType('bar')">Bar</button>
-        <button class="btn btn-outline btn-sm" id="btnLine" onclick="setChartType('line')">Line</button>
-        <button class="btn btn-outline btn-sm" id="btnStacked" onclick="setChartType('stacked')">Stacked</button>
+  <div class="a-section-body">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+      <div class="chart-card">
+        <div class="chart-title">Category Split</div>
+        <canvas id="categoryChart"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-title">Category Breakdown</div>
+        <table>
+          <thead><tr><th>Category</th><th>Count</th><th>Total</th></tr></thead>
+          <tbody>
+            {% for r in by_category %}
+            <tr>
+              <td><span class="cat-badge">{{ r.category__name|default:"Uncategorised" }}</span></td>
+              <td style="color:var(--muted)">{{ r.count }}</td>
+              <td class="amount-cell">{{ r.total|inr }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
       </div>
     </div>
-    <canvas id="trendChart"></canvas>
-  </div>
-  {% if by_payment %}
-  <div class="card">
-    <div class="card-title">By Payment Method</div>
-    <table>
-      <thead><tr><th>Method</th><th>Count</th><th>Total</th></tr></thead>
-      <tbody>
-        {% for r in by_payment %}
-        <tr>
-          <td><span class="pay-badge">{{ r.payment_method|title }}</span></td>
-          <td style="color:var(--muted)">{{ r.count }}</td>
-          <td class="amount-cell">{{ r.total|inr }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% endif %}
-</div>
-
-<!-- BY FAMILY MEMBER: Chart + Table side-by-side -->
-{% if by_member and by_member|length > 0 %}
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
-  <div class="chart-card">
-    <div class="chart-title">By Family Member</div>
-    <canvas id="memberChart"></canvas>
-  </div>
-  <div class="card">
-    <div class="card-title">Family Breakdown</div>
-    <table>
-      <thead><tr><th>Member</th><th>Count</th><th>Total</th></tr></thead>
-      <tbody>
-        {% for r in by_member %}
-        <tr>
-          <td>
-            <div style="display:flex;align-items:center;gap:.4rem;">
-              {% if r.spent_by__avatar_color %}
-              <div style="width:22px;height:22px;border-radius:50%;background:{{ r.spent_by__avatar_color }};flex-shrink:0;"></div>
-              {% endif %}
-              <strong>{{ r.spent_by__name|default:"Unassigned" }}</strong>
-            </div>
-          </td>
-          <td style="color:var(--muted)">{{ r.count }}</td>
-          <td class="amount-cell">{{ r.total|inr }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
   </div>
 </div>
 {% endif %}
 
+<!-- ============================================================
+     SECTION: Spending Trend + Payment Method
+     ============================================================ -->
+<div class="a-section" data-section="d-trend">
+  <div class="a-section-header" onclick="toggleSection(this)">
+    <span>📈 Spending Trend & Payment Methods</span>
+    <span class="a-chevron">▾</span>
+  </div>
+  <div class="a-section-body">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+      <div class="chart-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.85rem;">
+          <div class="chart-title" style="margin:0">Spending Trend</div>
+          <div style="display:flex;gap:.35rem;">
+            <button class="btn btn-outline btn-sm active" id="btnBar" onclick="setChartType('bar')">Bar</button>
+            <button class="btn btn-outline btn-sm" id="btnLine" onclick="setChartType('line')">Line</button>
+            <button class="btn btn-outline btn-sm" id="btnStacked" onclick="setChartType('stacked')">Stacked</button>
+          </div>
+        </div>
+        <canvas id="trendChart"></canvas>
+      </div>
+      {% if by_payment %}
+      <div class="card">
+        <div class="card-title">By Payment Method</div>
+        <table>
+          <thead><tr><th>Method</th><th>Count</th><th>Total</th></tr></thead>
+          <tbody>
+            {% for r in by_payment %}
+            <tr>
+              <td><span class="pay-badge">{{ r.payment_method|title }}</span></td>
+              <td style="color:var(--muted)">{{ r.count }}</td>
+              <td class="amount-cell">{{ r.total|inr }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SECTION: By Family Member
+     ============================================================ -->
+{% if by_member and by_member|length > 0 %}
+<div class="a-section" data-section="d-family">
+  <div class="a-section-header" onclick="toggleSection(this)">
+    <span>👨‍👩‍👧‍👦 By Family Member</span>
+    <span class="a-chevron">▾</span>
+  </div>
+  <div class="a-section-body">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+      <div class="chart-card">
+        <div class="chart-title">Family Split</div>
+        <canvas id="memberChart"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-title">Family Breakdown</div>
+        <table>
+          <thead><tr><th>Member</th><th>Count</th><th>Total</th></tr></thead>
+          <tbody>
+            {% for r in by_member %}
+            <tr>
+              <td>
+                <div style="display:flex;align-items:center;gap:.4rem;">
+                  {% if r.spent_by__avatar_color %}
+                  <div style="width:22px;height:22px;border-radius:50%;background:{{ r.spent_by__avatar_color }};flex-shrink:0;"></div>
+                  {% endif %}
+                  <strong>{{ r.spent_by__name|default:"Unassigned" }}</strong>
+                </div>
+              </td>
+              <td style="color:var(--muted)">{{ r.count }}</td>
+              <td class="amount-cell">{{ r.total|inr }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- SHARED STYLES -->
 <style>
+.a-section { margin-bottom:.75rem; border-radius:var(--radius-md); overflow:hidden; border:1px solid var(--border); }
+.a-section-header {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:.85rem 1.25rem; cursor:pointer; user-select:none;
+  background:var(--card-bg); font-weight:700; font-size:.95rem;
+  transition:background .15s;
+}
+.a-section-header:hover { background:var(--light); }
+.a-chevron {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:28px; height:28px; border-radius:6px;
+  background:var(--border); color:var(--text);
+  font-size:1.1rem; font-weight:700; line-height:1;
+  transition:transform .2s, background .15s;
+}
+.a-section-header:hover .a-chevron { background:var(--muted); color:#fff; }
+.a-section.collapsed .a-chevron { transform:rotate(-90deg); }
+.a-section-body { padding:1rem 1.25rem; background:var(--bg); }
+.a-section.collapsed .a-section-body { display:none; }
 @media(max-width:768px) {
   div[style*="grid-template-columns: 1fr 1fr"],
   div[style*="grid-template-columns:1fr 1fr"] { grid-template-columns: 1fr !important; }
 }
 </style>
 
+<!-- COLLAPSE/EXPAND SCRIPT -->
+<script>
+function toggleSection(header) {
+  const section = header.closest('.a-section');
+  section.classList.toggle('collapsed');
+  const state = {};
+  document.querySelectorAll('.a-section').forEach(s => {
+    state[s.dataset.section] = s.classList.contains('collapsed');
+  });
+  localStorage.setItem('dashboard_sections', JSON.stringify(state));
+}
+(function() {
+  try {
+    const state = JSON.parse(localStorage.getItem('dashboard_sections') || '{}');
+    Object.entries(state).forEach(([key, collapsed]) => {
+      if (collapsed) {
+        const el = document.querySelector(`.a-section[data-section="${key}"]`);
+        if (el) el.classList.add('collapsed');
+      }
+    });
+  } catch(e) {}
+})();
+</script>
+
+<!-- CHARTS -->
 <script>
 const COLORS = {{ chart_colors|safe }};
 const monthlyLabels = {{ monthly_labels|safe }};
@@ -206,7 +289,6 @@ new Chart(document.getElementById('categoryChart').getContext('2d'), {
   }
 });
 
-// Member doughnut chart
 if (memberLabels.length > 0 && document.getElementById('memberChart')) {
   new Chart(document.getElementById('memberChart').getContext('2d'), {
     type: 'doughnut',
