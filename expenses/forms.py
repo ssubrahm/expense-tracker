@@ -32,8 +32,10 @@ class ExpenseForm(forms.ModelForm):
         model = Expense
         fields = ["title", "amount", "date", "category", "spent_by", "payment_method", "recurrence", "notes"]
         widgets = {
-            "date": forms.DateInput(attrs={"type": "date"}),
-            "notes": forms.Textarea(attrs={"rows": 3}),
+            "title": forms.TextInput(attrs={"placeholder": "e.g. Grocery shopping", "required": True, "maxlength": 200}),
+            "amount": forms.NumberInput(attrs={"placeholder": "0.00", "min": "0.01", "step": "0.01", "inputmode": "decimal", "required": True}),
+            "date": forms.DateInput(attrs={"type": "date", "required": True}),
+            "notes": forms.Textarea(attrs={"rows": 3, "placeholder": "Optional notes..."}),
         }
 
 

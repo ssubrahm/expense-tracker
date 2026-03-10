@@ -967,6 +967,112 @@
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
     ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+    /* ============================================================
+       FORM VALIDATION
+       ============================================================ */
+    .form-group.has-error input,
+    .form-group.has-error select,
+    .form-group.has-error textarea {
+      border-color: var(--red) !important;
+      box-shadow: 0 0 0 2px rgba(239,68,68,.15);
+    }
+    .form-group { margin-bottom: 1rem; }
+    .form-group label { display: block; font-size: .82rem; font-weight: 600; margin-bottom: .35rem; }
+
+    /* ============================================================
+       MOBILE RESPONSIVE OVERHAUL
+       ============================================================ */
+    @media(max-width:768px) {
+      .container { padding: 1rem .75rem; }
+      .page-header { flex-direction: column; gap: .5rem; align-items: flex-start; }
+      .page-header h1 { font-size: 1.2rem; }
+      .page-actions { width: 100%; }
+      .page-actions .btn { flex: 1; justify-content: center; text-align: center; }
+
+      /* Stat cards: 2 columns on mobile */
+      .stats-grid { grid-template-columns: 1fr 1fr !important; gap: .5rem; }
+      .stat-card { padding: .75rem; }
+      .stat-value { font-size: 1.1rem; }
+      .stat-label { font-size: .68rem; }
+
+      /* All 2-col grids go single column */
+      .two-col,
+      div[style*="grid-template-columns:1fr 1fr"],
+      div[style*="grid-template-columns: 1fr 1fr"],
+      div[style*="grid-template-columns:2fr 1fr"],
+      div[style*="grid-template-columns: 2fr 1fr"] {
+        grid-template-columns: 1fr !important;
+      }
+
+      /* 3-col assessment grid */
+      div[style*="grid-template-columns:1fr 1fr 1fr"],
+      div[style*="grid-template-columns: 1fr 1fr 1fr"] {
+        grid-template-columns: 1fr !important;
+      }
+
+      /* Tables: horizontal scroll */
+      .table-card { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      table { min-width: 600px; }
+      th, td { padding: .5rem .6rem; font-size: .75rem; }
+
+      /* Form card full width */
+      .form-card { max-width: 100%; padding: 1.25rem; margin: 0; }
+
+      /* Charts */
+      .chart-card { padding: .75rem; }
+      .chart-title { font-size: .82rem; }
+
+      /* Cards */
+      .card { padding: .85rem; }
+      .card-title { font-size: .85rem; }
+
+      /* Collapsible sections */
+      .a-section-header { padding: .65rem .85rem; font-size: .85rem; }
+      .a-section-body { padding: .75rem .85rem; }
+      .a-chevron { width: 24px; height: 24px; font-size: .95rem; }
+
+      /* Filter panel */
+      .filter-grid { grid-template-columns: 1fr !important; }
+
+      /* Hide kbd hint on mobile */
+      .kbd-hint { display: none; }
+
+      /* Budget cards grid */
+      div[style*="grid-template-columns:repeat(auto-fill"] {
+        grid-template-columns: 1fr !important;
+      }
+
+      /* Family member cards */
+      div[style*="grid-template-columns:repeat(auto-fit"] {
+        grid-template-columns: 1fr !important;
+      }
+
+      /* Spends bulk bar */
+      #bulkBar, #budgetBulkBar { flex-wrap: wrap; }
+
+      /* Heatmap scroll */
+      .heatmap { min-width: 500px; }
+
+      /* Profile 2-col → 1-col */
+      div[style*="grid-template-columns:1fr 1fr;gap:1.5rem"] {
+        grid-template-columns: 1fr !important;
+      }
+    }
+
+    /* Small phones */
+    @media(max-width:400px) {
+      .stats-grid { grid-template-columns: 1fr !important; }
+      .stat-value { font-size: 1rem; }
+      .container { padding: .75rem .5rem; }
+      .brand-name { font-size: .95rem; }
+    }
+
+    /* Viewport meta hint for touch devices */
+    @media(hover:none) and (pointer:coarse) {
+      input, select, textarea { font-size: 16px !important; }
+      .btn { min-height: 44px; min-width: 44px; }
+    }
   </style>
 </head>
 <body>

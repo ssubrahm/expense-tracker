@@ -2,17 +2,23 @@
 {% block content %}
 <div class="form-card">
   <h1>{{ title }}</h1>
-  <form method="post" id="mainForm">
+  <form method="post" id="mainForm" novalidate>
     {% csrf_token %}
     {% for field in form %}
-      <div>
-        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+      <div class="form-group {% if field.errors %}has-error{% endif %}">
+        <label for="{{ field.id_for_label }}">
+          {{ field.label }}
+          {% if field.field.required %}<span style="color:var(--red);">*</span>{% endif %}
+        </label>
         {% if field.name == 'amount' %}
         <div class="amount-input-wrap">
           {{ field }}
         </div>
         {% else %}
         {{ field }}
+        {% endif %}
+        {% if field.help_text %}
+          <small class="form-hint">{{ field.help_text }}</small>
         {% endif %}
         {% if field.errors %}
           <small class="form-error">{{ field.errors|join:", " }}</small>
@@ -21,15 +27,67 @@
     {% endfor %}
     <div class="form-actions">
       <button type="submit" class="btn btn-primary">Save</button>
-      <a href="{% url 'dashboard' %}" class="btn btn-secondary">Cancel</a>
+      <a href="{% url 'spends' %}" class="btn btn-secondary">Cancel</a>
       <span class="kbd-hint"><kbd>Ctrl</kbd>+<kbd>Enter</kbd> to save</span>
     </div>
   </form>
 </div>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   var first = document.querySelector('.form-card input[type=text], .form-card input[type=number], .form-card select');
   if (first) first.focus();
+
+  // Client-side validation
+  var form = document.getElementById('mainForm');
+  form.addEventListener('submit', function(e) {
+    var valid = true;
+    form.querySelectorAll('.form-group').forEach(function(g) { g.classList.remove('has-error'); });
+    form.querySelectorAll('.client-error').forEach(function(el) { el.remove(); });
+
+    var title = form.querySelector('[name="title"]');
+    if (title && !title.value.trim()) {
+      showError(title, 'Title is required');
+      valid = false;
+    }
+
+    var amount = form.querySelector('[name="amount"]');
+    if (amount) {
+      var val = parseFloat(amount.value);
+      if (!amount.value || isNaN(val) || val <= 0) {
+        showError(amount, 'Enter a valid amount greater than 0');
+        valid = false;
+      }
+    }
+
+    var dateField = form.querySelector('[name="date"]');
+    if (dateField && !dateField.value) {
+      showError(dateField, 'Date is required');
+      valid = false;
+    }
+
+    if (!valid) e.preventDefault();
+  });
+
+  function showError(input, msg) {
+    var group = input.closest('.form-group');
+    if (group) group.classList.add('has-error');
+    var err = document.createElement('small');
+    err.className = 'form-error client-error';
+    err.textContent = msg;
+    input.parentNode.insertBefore(err, input.nextSibling);
+  }
+
+  // Format amount on blur
+  var amountInput = form.querySelector('[name="amount"]');
+  if (amountInput) {
+    amountInput.addEventListener('blur', function() {
+      var val = parseFloat(this.value);
+      if (!isNaN(val) && val > 0) {
+        this.value = val.toFixed(2);
+      }
+    });
+  }
 });
 </script>
 {% endblock %}
