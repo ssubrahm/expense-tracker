@@ -1,5 +1,16 @@
 __pycache__/
 *.pyc
+*.pyo
 db.sqlite3
 *.zip
 .config/
+venv/
+.venv/
+env/
+*.egg-info/
+dist/
+build/
+.DS_Store
+Thumbs.db
+*.log
+.env
