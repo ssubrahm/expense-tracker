@@ -260,6 +260,29 @@
       .mobile-nav a.active { color: var(--accent); }
       .mobile-nav a .mob-icon { font-size: 1.25rem; }
       body { padding-bottom: 72px; }
+      .mobile-more {
+        display: none;
+        position: fixed;
+        bottom: 60px;
+        right: 0;
+        left: 0;
+        background: var(--card);
+        border-top: 1px solid var(--border);
+        box-shadow: 0 -4px 20px rgba(0,0,0,.15);
+        z-index: 101;
+        padding: .5rem 0 calc(.5rem + env(safe-area-inset-bottom, 0px));
+      }
+      .mobile-more.show { display: block; }
+      .mobile-more a {
+        display: block;
+        padding: .75rem 1.25rem;
+        text-decoration: none;
+        color: var(--text);
+        font-size: .9rem;
+        font-weight: 500;
+        border-bottom: 1px solid var(--border);
+      }
+      .mobile-more a:hover { background: var(--light); }
     }
 
     /* ============================================================
@@ -1141,12 +1164,24 @@
   <a href="{% url 'expense_create' %}" {% if request.resolver_match.url_name == 'expense_create' %}class="active"{% endif %}>
     <span class="mob-icon">➕</span>Add
   </a>
-  <a href="{% url 'family_list' %}" {% if 'family' in request.resolver_match.url_name %}class="active"{% endif %}>
-    <span class="mob-icon">👨‍👩‍👧‍👦</span>Family
-  </a>
   <a href="{% url 'analytics' %}" {% if request.resolver_match.url_name == 'analytics' %}class="active"{% endif %}>
-    <span class="mob-icon">📊</span>Analytics
+    <span class="mob-icon">📈</span>Analytics
   </a>
+  <a href="#" onclick="document.getElementById('mobileMore').classList.toggle('show');return false;" class="{% if request.resolver_match.url_name == 'budget_list' or request.resolver_match.url_name == 'category_list' or 'family' in request.resolver_match.url_name %}active{% endif %}">
+    <span class="mob-icon">☰</span>More
+  </a>
+</div>
+
+<!-- MOBILE MORE MENU -->
+<div class="mobile-more" id="mobileMore">
+  <a href="{% url 'budget_list' %}">🎯 Budgets</a>
+  <a href="{% url 'category_list' %}">🏷️ Categories</a>
+  <a href="{% url 'family_list' %}">👨‍👩‍👧‍👦 Family</a>
+  <a href="{% url 'profile' %}">👤 Profile</a>
+  <form method="post" action="{% url 'logout' %}" style="margin:0;">
+    {% csrf_token %}
+    <button type="submit" style="width:100%;text-align:left;background:none;border:none;padding:.75rem 1.25rem;font-size:.9rem;font-family:inherit;cursor:pointer;color:var(--muted);">🚪 Logout</button>
+  </form>
 </div>
 
 <!-- TOASTS -->
@@ -1227,6 +1262,14 @@ document.addEventListener('keydown', function(e) {
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
     var form = document.querySelector('.form-card form, .filter-body form');
     if (form) form.submit();
+  }
+});
+
+// Close mobile more menu when clicking outside
+document.addEventListener('click', function(e) {
+  var menu = document.getElementById('mobileMore');
+  if (menu && menu.classList.contains('show') && !e.target.closest('.mobile-more') && !e.target.closest('.mobile-nav a[onclick]')) {
+    menu.classList.remove('show');
   }
 });
 </script>
