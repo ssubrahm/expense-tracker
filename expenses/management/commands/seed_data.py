@@ -45,9 +45,9 @@ class Command(BaseCommand):
                 defaults={"first_name": "Srinath", "is_staff": True},
             )
             if u_created:
-                user.set_password("srinath123")
+                user.set_password("Sri@Expense2026!")
                 user.save()
-                self.stdout.write("  User: Created 'srinath' (password: srinath123)")
+                self.stdout.write("  User: Created 'srinath' (password: Sri@Expense2026!)")
             else:
                 self.stdout.write("  User: Exists 'srinath'")
             srinath.user = user
@@ -57,9 +57,9 @@ class Command(BaseCommand):
 
         # ── Other family members ──
         family_members = [
-            {"name": "Jeejibai S", "relationship": "spouse", "avatar_color": "#ec4899", "username": "jeejibai", "password": "jeejibai123"},
-            {"name": "Madhumita S", "relationship": "child", "avatar_color": "#f59e0b", "username": "madhumita", "password": "madhumita123"},
-            {"name": "Roopa", "relationship": "parent", "avatar_color": "#10b981", "username": "roopa", "password": "roopa123"},
+            {"name": "Jeejibai S", "relationship": "spouse", "avatar_color": "#ec4899", "username": "jeejibai", "password": "Jeeji@Expense2026!"},
+            {"name": "Madhumita S", "relationship": "child", "avatar_color": "#f59e0b", "username": "madhumita", "password": "Madhu@Expense2026!"},
+            {"name": "Roopa", "relationship": "parent", "avatar_color": "#10b981", "username": "roopa", "password": "Roopa@Expense2026!"},
         ]
         for fm_data in family_members:
             fm, fm_created = FamilyMember.objects.get_or_create(
