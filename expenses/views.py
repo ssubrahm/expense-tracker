@@ -296,6 +296,7 @@ def dashboard(request):
         "today": today,
         "cat_color_map": cat_color_map,
         "chart_colors": json.dumps(CHART_COLORS),
+        "export_categories": Category.objects.all().order_by("name"),
     }
     return render(request, "expenses/dashboard.html", context)
 
@@ -1086,3 +1087,139 @@ def family_delete(request, pk):
         messages.success(request, f"'{member.name}' deactivated.")
         return redirect("family_list")
     return render(request, "expenses/family_confirm_delete.html", {"member": member})
+
+
+# ── Advanced Export System (V2) ─────────────────────────────────
+
+@login_required
+def export_preview(request):
+    """AJAX endpoint: returns filtered expense preview + count as JSON."""
+    qs = _build_export_queryset(request)
+    count = qs.count()
+    preview = []
+    for e in qs[:10]:
+        preview.append({
+            "date": e.date.isoformat(),
+            "title": e.title,
+            "category": e.category.name if e.category else "",
+            "spent_by": e.spent_by.name if e.spent_by else "",
+            "amount": str(e.amount),
+            "payment_method": e.get_payment_method_display(),
+        })
+    return JsonResponse({"count": count, "preview": preview})
+
+
+@login_required
+def export_download(request):
+    """Download filtered expenses in CSV, JSON, or PDF format."""
+    qs = _build_export_queryset(request)
+    fmt = request.GET.get("format", "csv")
+    filename = request.GET.get("filename", "expenses").strip() or "expenses"
+    filename = "".join(c for c in filename if c.isalnum() or c in "-_ ")
+
+    if fmt == "json":
+        return _export_json(qs, filename)
+    elif fmt == "pdf":
+        return _export_pdf(qs, filename)
+    return _export_csv_v2(qs, filename)
+
+
+def _build_export_queryset(request):
+    """Build filtered queryset from export request params."""
+    qs = Expense.objects.select_related("category", "spent_by").order_by("-date")
+    date_from = request.GET.get("date_from")
+    date_to = request.GET.get("date_to")
+    categories = request.GET.getlist("categories")
+    if date_from:
+        qs = qs.filter(date__gte=date_from)
+    if date_to:
+        qs = qs.filter(date__lte=date_to)
+    if categories:
+        qs = qs.filter(category__pk__in=categories)
+    return qs
+
+
+def _export_csv_v2(qs, filename):
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = f'attachment; filename="{filename}.csv"'
+    writer = csv.writer(response)
+    writer.writerow(["Date", "Title", "Category", "Spent By", "Amount", "Payment Method", "Recurrence", "Notes"])
+    for e in qs:
+        writer.writerow([
+            e.date, e.title, e.category.name if e.category else "",
+            e.spent_by.name if e.spent_by else "", e.amount,
+            e.get_payment_method_display(), e.get_recurrence_display(), e.notes,
+        ])
+    return response
+
+
+def _export_json(qs, filename):
+    data = []
+    for e in qs:
+        data.append({
+            "date": e.date.isoformat(),
+            "title": e.title,
+            "category": e.category.name if e.category else "",
+            "spent_by": e.spent_by.name if e.spent_by else "",
+            "amount": float(e.amount),
+            "payment_method": e.get_payment_method_display(),
+            "recurrence": e.get_recurrence_display(),
+            "notes": e.notes or "",
+        })
+    response = HttpResponse(
+        json.dumps(data, indent=2, ensure_ascii=False),
+        content_type="application/json",
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}.json"'
+    return response
+
+
+def _export_pdf(qs, filename):
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet
+    import io
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4), topMargin=15*mm, bottomMargin=15*mm)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    elements.append(Paragraph(f"OurMoneyTrail — Expense Export", styles["Title"]))
+    elements.append(Paragraph(f"{qs.count()} records", styles["Normal"]))
+    elements.append(Spacer(1, 8*mm))
+
+    header = ["Date", "Title", "Category", "Spent By", "Amount", "Payment", "Notes"]
+    table_data = [header]
+    for e in qs:
+        table_data.append([
+            str(e.date), e.title[:30],
+            (e.category.name if e.category else "")[:20],
+            (e.spent_by.name if e.spent_by else "")[:15],
+            f"₹{e.amount:,.2f}",
+            e.get_payment_method_display()[:15],
+            (e.notes or "")[:25],
+        ])
+
+    t = Table(table_data, repeatRows=1)
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#6366f1")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, 0), 9),
+        ("FONTSIZE", (0, 1), (-1, -1), 8),
+        ("ALIGN", (4, 0), (4, -1), "RIGHT"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    elements.append(t)
+
+    doc.build(elements)
+    buf.seek(0)
+    response = HttpResponse(buf.read(), content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{filename}.pdf"'
+    return response

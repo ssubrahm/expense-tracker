@@ -4,6 +4,81 @@
 
 <div class="page-header">
   <h1>Dashboard</h1>
+  <button class="btn btn-success btn-sm" onclick="openExportModal()">⬇ Export Data</button>
+</div>
+
+<!-- EXPORT MODAL -->
+<div class="export-overlay" id="exportOverlay" onclick="if(event.target===this)closeExportModal()">
+  <div class="export-modal">
+    <div class="export-header">
+      <h2>📦 Export Expenses</h2>
+      <button class="export-close" onclick="closeExportModal()">&times;</button>
+    </div>
+    <div class="export-body">
+      <!-- FORMAT -->
+      <div class="export-section">
+        <label class="export-label">Format</label>
+        <div class="export-formats">
+          <label class="format-option active" data-fmt="csv">
+            <input type="radio" name="exp_format" value="csv" checked> <span>📄 CSV</span>
+          </label>
+          <label class="format-option" data-fmt="json">
+            <input type="radio" name="exp_format" value="json"> <span>🔧 JSON</span>
+          </label>
+          <label class="format-option" data-fmt="pdf">
+            <input type="radio" name="exp_format" value="pdf"> <span>📑 PDF</span>
+          </label>
+        </div>
+      </div>
+      <!-- DATE RANGE -->
+      <div class="export-section">
+        <label class="export-label">Date Range</label>
+        <div style="display:flex;gap:.5rem;align-items:center;">
+          <input type="date" id="expDateFrom" onchange="refreshPreview()">
+          <span style="color:var(--muted);">to</span>
+          <input type="date" id="expDateTo" onchange="refreshPreview()">
+        </div>
+      </div>
+      <!-- CATEGORIES -->
+      <div class="export-section">
+        <label class="export-label">Categories</label>
+        <div class="export-cats" id="expCats">
+          {% for cat in export_categories %}
+          <label class="cat-check"><input type="checkbox" value="{{ cat.pk }}" onchange="refreshPreview()"> {{ cat.name }}</label>
+          {% endfor %}
+        </div>
+      </div>
+      <!-- FILENAME -->
+      <div class="export-section">
+        <label class="export-label">Filename</label>
+        <input type="text" id="expFilename" value="expenses" placeholder="expenses" style="max-width:250px;">
+      </div>
+      <!-- SUMMARY -->
+      <div class="export-summary" id="expSummary">
+        <span class="export-count" id="expCount">—</span> records will be exported
+      </div>
+      <!-- PREVIEW -->
+      <div class="export-section">
+        <label class="export-label">Preview (first 10 rows)</label>
+        <div class="export-preview-wrap">
+          <div id="expLoading" class="export-loading" style="display:none;">
+            <div class="spinner"></div> Loading preview...
+          </div>
+          <table class="export-preview-table" id="expPreviewTable">
+            <thead><tr><th>Date</th><th>Title</th><th>Category</th><th>Spent By</th><th>Amount</th><th>Payment</th></tr></thead>
+            <tbody id="expPreviewBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="export-footer">
+      <button class="btn btn-secondary" onclick="closeExportModal()">Cancel</button>
+      <button class="btn btn-primary" id="expDownloadBtn" onclick="downloadExport()">
+        <span id="expDlText">⬇ Download CSV</span>
+        <span id="expDlSpinner" class="spinner-sm" style="display:none;"></span>
+      </button>
+    </div>
+  </div>
 </div>
 
 <!-- ============================================================
@@ -308,5 +383,179 @@ if (memberLabels.length > 0 && document.getElementById('memberChart')) {
     }
   });
 }
+
+// ── Export Modal Logic ──
+function openExportModal() {
+  document.getElementById('exportOverlay').classList.add('show');
+  refreshPreview();
+}
+function closeExportModal() {
+  document.getElementById('exportOverlay').classList.remove('show');
+}
+
+function getExportParams() {
+  const params = new URLSearchParams();
+  const df = document.getElementById('expDateFrom').value;
+  const dt = document.getElementById('expDateTo').value;
+  if (df) params.append('date_from', df);
+  if (dt) params.append('date_to', dt);
+  document.querySelectorAll('#expCats input:checked').forEach(cb => params.append('categories', cb.value));
+  return params;
+}
+
+let previewTimer;
+function refreshPreview() {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(doRefreshPreview, 300);
+}
+
+function doRefreshPreview() {
+  const params = getExportParams();
+  document.getElementById('expLoading').style.display = 'flex';
+  document.getElementById('expPreviewTable').style.opacity = '0.4';
+
+  fetch('/export/preview/?' + params.toString())
+    .then(r => r.json())
+    .then(data => {
+      document.getElementById('expCount').textContent = data.count;
+      const tbody = document.getElementById('expPreviewBody');
+      tbody.innerHTML = '';
+      data.preview.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${row.date}</td><td>${row.title}</td><td>${row.category}</td><td>${row.spent_by}</td><td>₹${parseFloat(row.amount).toLocaleString('en-IN',{minimumFractionDigits:2})}</td><td>${row.payment_method}</td>`;
+        tbody.appendChild(tr);
+      });
+      if (data.preview.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:1.5rem;">No matching expenses</td></tr>';
+      }
+      document.getElementById('expLoading').style.display = 'none';
+      document.getElementById('expPreviewTable').style.opacity = '1';
+    });
+}
+
+// Format radio buttons
+document.querySelectorAll('.format-option input').forEach(radio => {
+  radio.addEventListener('change', function() {
+    document.querySelectorAll('.format-option').forEach(o => o.classList.remove('active'));
+    this.closest('.format-option').classList.add('active');
+    const fmt = this.value.toUpperCase();
+    document.getElementById('expDlText').textContent = '⬇ Download ' + fmt;
+  });
+});
+
+function downloadExport() {
+  const params = getExportParams();
+  const fmt = document.querySelector('input[name="exp_format"]:checked').value;
+  const filename = document.getElementById('expFilename').value || 'expenses';
+  params.append('format', fmt);
+  params.append('filename', filename);
+
+  const btn = document.getElementById('expDownloadBtn');
+  const txt = document.getElementById('expDlText');
+  const spin = document.getElementById('expDlSpinner');
+  btn.disabled = true;
+  txt.style.display = 'none';
+  spin.style.display = 'inline-block';
+
+  const a = document.createElement('a');
+  a.href = '/export/download/?' + params.toString();
+  a.click();
+
+  setTimeout(() => {
+    btn.disabled = false;
+    txt.style.display = 'inline';
+    spin.style.display = 'none';
+  }, 1500);
+}
 </script>
+
+<!-- EXPORT MODAL STYLES -->
+<style>
+.export-overlay {
+  display:none; position:fixed; inset:0; background:rgba(0,0,0,.5);
+  z-index:200; align-items:center; justify-content:center;
+}
+.export-overlay.show { display:flex; }
+.export-modal {
+  background:var(--card-bg,var(--card,#fff)); border-radius:16px;
+  width:95%; max-width:720px; max-height:90vh; display:flex; flex-direction:column;
+  box-shadow:0 25px 60px rgba(0,0,0,.25); overflow:hidden;
+}
+.export-header {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:1.25rem 1.5rem; border-bottom:1px solid var(--border);
+}
+.export-header h2 { font-size:1.1rem; font-weight:800; margin:0; }
+.export-close {
+  background:none; border:none; font-size:1.5rem; cursor:pointer;
+  color:var(--muted); line-height:1; padding:.25rem;
+}
+.export-close:hover { color:var(--text); }
+.export-body { padding:1.25rem 1.5rem; overflow-y:auto; flex:1; }
+.export-footer {
+  display:flex; justify-content:flex-end; gap:.5rem;
+  padding:1rem 1.5rem; border-top:1px solid var(--border);
+}
+.export-section { margin-bottom:1.25rem; }
+.export-label {
+  display:block; font-size:.78rem; font-weight:700; color:var(--muted);
+  text-transform:uppercase; letter-spacing:.5px; margin-bottom:.5rem;
+}
+.export-formats { display:flex; gap:.5rem; }
+.format-option {
+  display:flex; align-items:center; gap:.35rem; padding:.5rem 1rem;
+  border:2px solid var(--border); border-radius:8px; cursor:pointer;
+  font-size:.85rem; font-weight:600; transition:all .15s;
+}
+.format-option input { display:none; }
+.format-option.active { border-color:var(--accent); background:rgba(99,102,241,.08); color:var(--accent); }
+.format-option:hover { border-color:var(--muted); }
+.export-cats {
+  display:flex; flex-wrap:wrap; gap:.5rem;
+}
+.cat-check {
+  display:flex; align-items:center; gap:.3rem; font-size:.82rem;
+  padding:.3rem .6rem; border:1px solid var(--border); border-radius:6px;
+  cursor:pointer; transition:all .15s;
+}
+.cat-check:has(input:checked) { border-color:var(--accent); background:rgba(99,102,241,.08); }
+.cat-check input { width:auto; margin:0; }
+.export-summary {
+  padding:.75rem 1rem; background:var(--light); border-radius:8px;
+  font-size:.85rem; margin-bottom:1.25rem;
+}
+.export-count { font-weight:800; color:var(--accent); font-size:1.1rem; }
+.export-preview-wrap {
+  border:1px solid var(--border); border-radius:8px; overflow:auto; max-height:220px;
+  position:relative;
+}
+.export-preview-table { width:100%; border-collapse:collapse; font-size:.78rem; }
+.export-preview-table th {
+  background:var(--light); padding:.4rem .6rem; text-align:left;
+  font-weight:700; color:var(--muted); font-size:.7rem; text-transform:uppercase;
+  position:sticky; top:0;
+}
+.export-preview-table td { padding:.4rem .6rem; border-bottom:1px solid var(--border); }
+.export-loading {
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  gap:.5rem; background:rgba(255,255,255,.8); font-size:.82rem; color:var(--muted);
+  z-index:1;
+}
+[data-theme="dark"] .export-loading { background:rgba(15,23,42,.8); }
+.spinner {
+  width:20px; height:20px; border:2.5px solid var(--border);
+  border-top-color:var(--accent); border-radius:50%;
+  animation:spin .6s linear infinite;
+}
+.spinner-sm {
+  display:inline-block; width:16px; height:16px; border:2px solid rgba(255,255,255,.3);
+  border-top-color:#fff; border-radius:50%;
+  animation:spin .6s linear infinite; vertical-align:middle;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
+@media(max-width:600px) {
+  .export-modal { width:100%; max-width:100%; max-height:100vh; border-radius:0; }
+  .export-formats { flex-direction:column; }
+}
+</style>
 {% endblock %}
