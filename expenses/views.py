@@ -857,6 +857,19 @@ def budget_delete(request, pk):
 
 
 @login_required
+def dashboard_export_csv(request):
+    """Simple CSV export of all expenses: Date, Category, Amount, Description."""
+    expenses = Expense.objects.select_related("category").order_by("-date")
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="expenses.csv"'
+    writer = csv.writer(response)
+    writer.writerow(["Date", "Category", "Amount", "Description"])
+    for e in expenses:
+        writer.writerow([e.date, e.category.name if e.category else "", e.amount, e.title])
+    return response
+
+
+@login_required
 def export_csv(request):
     expenses, _ = apply_filters(request)
     sort = request.GET.get("sort", "-date")
